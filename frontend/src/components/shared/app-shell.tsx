@@ -1,4 +1,4 @@
-import { Bookmark, LayoutGrid, Settings, Triangle } from "lucide-react";
+import { LayoutGrid, Settings, Triangle } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -14,13 +14,12 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const navigationItems = [
-  { label: "Parking", href: "/home", icon: LayoutGrid },
-  { label: "Bookings", href: "/bookings", icon: Bookmark },
+  { label: "Parking", href: "/parking", icon: LayoutGrid },
   { label: "Settings", href: "/settings", icon: Settings },
 ] as const;
 
 type AppShellProps = {
-  activePath: (typeof navigationItems)[number]["href"];
+  activePath: (typeof navigationItems)[number]["href"] | "/profile" | "/bookings";
   children: React.ReactNode;
 };
 
