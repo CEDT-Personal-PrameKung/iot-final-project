@@ -11,6 +11,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const navigationItems = [
   { label: "Parking", href: "/home", icon: LayoutGrid },
@@ -25,6 +26,7 @@ type AppShellProps = {
 
 export function AppShell({ activePath, children }: AppShellProps) {
   return (
+    <TooltipProvider>
     <SidebarProvider className="gap-2 bg-[#f5f5f5] p-2 pb-[calc(4.5rem+env(safe-area-inset-bottom))] text-neutral-800 md:pb-2">
       <Sidebar collapsible="none" className="relative hidden w-[76px] shrink-0 bg-transparent md:flex md:h-auto md:self-stretch">
         <SidebarHeader className="items-center p-4">
@@ -37,13 +39,18 @@ export function AppShell({ activePath, children }: AppShellProps) {
             <SidebarMenu className="gap-4">
               {navigationItems.map(({ label, href, icon: Icon }) => (
                 <SidebarMenuItem key={href}>
-                  <SidebarMenuButton
-                    render={<Link href={href} aria-label={label} aria-current={activePath === href ? "page" : undefined} />}
-                    isActive={activePath === href}
-                    className="size-11 justify-center rounded-2xl p-0 hover:bg-neutral-300 data-active:bg-[#e5e5e5] [&_svg]:size-6"
-                  >
-                    <Icon className="fill-current [&_circle]:fill-[#f5f5f5]" strokeWidth={1} aria-hidden="true" />
-                  </SidebarMenuButton>
+                  <Tooltip>
+                    <TooltipTrigger render={
+                      <SidebarMenuButton
+                        render={<Link href={href} aria-label={label} aria-current={activePath === href ? "page" : undefined} />}
+                        isActive={activePath === href}
+                        className="size-11 justify-center rounded-2xl p-0 hover:bg-neutral-300 data-active:bg-[#e5e5e5] [&_svg]:size-6"
+                      />
+                    }>
+                      <Icon className="fill-current [&_circle]:fill-[#f5f5f5]" strokeWidth={1} aria-hidden="true" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">{label}</TooltipContent>
+                  </Tooltip>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
@@ -56,13 +63,18 @@ export function AppShell({ activePath, children }: AppShellProps) {
           <SidebarMenu className="flex-row items-center justify-center gap-12">
             {navigationItems.map(({ label, href, icon: Icon }) => (
               <SidebarMenuItem key={href}>
-                <SidebarMenuButton
-                  render={<Link href={href} aria-label={label} aria-current={activePath === href ? "page" : undefined} />}
-                  isActive={activePath === href}
-                  className="size-11 justify-center rounded-2xl p-0 hover:bg-neutral-300 data-active:bg-[#e5e5e5] [&_svg]:size-6"
-                >
-                  <Icon className="fill-current [&_circle]:fill-[#f5f5f5]" strokeWidth={1} aria-hidden="true" />
-                </SidebarMenuButton>
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <SidebarMenuButton
+                      render={<Link href={href} aria-label={label} aria-current={activePath === href ? "page" : undefined} />}
+                      isActive={activePath === href}
+                      className="size-11 justify-center rounded-2xl p-0 hover:bg-neutral-300 data-active:bg-[#e5e5e5] [&_svg]:size-6"
+                    />
+                  }>
+                    <Icon className="fill-current [&_circle]:fill-[#f5f5f5]" strokeWidth={1} aria-hidden="true" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{label}</TooltipContent>
+                </Tooltip>
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
@@ -73,5 +85,6 @@ export function AppShell({ activePath, children }: AppShellProps) {
         {children}
       </SidebarInset>
     </SidebarProvider>
+    </TooltipProvider>
   );
 }
