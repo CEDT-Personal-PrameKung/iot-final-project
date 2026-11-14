@@ -1,5 +1,1 @@
-import { redirect } from "next/navigation";
-
-export default function TestPage() {
-  redirect("/home");
-}
+export { default } from "../home/page";
