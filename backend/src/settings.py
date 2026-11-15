@@ -2,12 +2,15 @@
 
 from functools import lru_cache
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str | None = None
+    app_secret_key: SecretStr | None = None
+    access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

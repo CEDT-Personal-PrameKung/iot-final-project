@@ -1,6 +1,7 @@
 """Request and response schemas for user accounts."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
@@ -18,6 +19,23 @@ class UserRegistration(BaseModel):
         if isinstance(value, str):
             return value.strip().lower()
         return value
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: SecretStr = Field(min_length=1, max_length=128)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
+
+class AccessToken(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
 
 
 class UserResponse(BaseModel):

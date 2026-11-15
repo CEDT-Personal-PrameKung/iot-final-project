@@ -41,6 +41,12 @@ password of 8–128 characters. Emails are normalized to lowercase, passwords
 are stored as Argon2 hashes, and duplicate emails return HTTP 409. The endpoint
 does not accept a role; public registrations always receive the `guest` role.
 
+Set `APP_SECRET_KEY` to a unique, random secret (for example, generate one with
+`openssl rand -hex 32`) before using `POST /auth/login`. Login accepts an email
+and password and returns a signed bearer token. Tokens expire after
+`ACCESS_TOKEN_EXPIRE_MINUTES` (30 by default). Send the token as
+`Authorization: Bearer <token>` to access `GET /auth/me`.
+
 ## Docker
 
 From the repository root, create `backend/.env` from the example if needed and
