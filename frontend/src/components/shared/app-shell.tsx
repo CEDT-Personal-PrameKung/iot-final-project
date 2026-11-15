@@ -1,9 +1,19 @@
-import { LayoutGrid, Settings, Triangle } from "lucide-react";
+import { Suspense } from "react";
+import { cookies } from "next/headers";
+import { LayoutGrid, LogOut, Settings, Triangle } from "lucide-react";
 import Link from "next/link";
 
+import { logout } from "@/app/login/actions";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -17,6 +27,93 @@ const navigationItems = [
   { label: "Parking", href: "/parking", icon: LayoutGrid },
   { label: "Settings", href: "/settings", icon: Settings },
 ] as const;
+
+const SESSION_COOKIE = "smart_parking_access_token";
+const backendApiUrl = process.env.BACKEND_API_URL ?? "http://localhost:8000";
+
+async function getSessionEmail(): Promise<string | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(new URL("/auth/me", backendApiUrl), {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload: unknown = await response.json();
+    if (
+      typeof payload === "object" &&
+      payload !== null &&
+      "email" in payload &&
+      typeof payload.email === "string"
+    ) {
+      return payload.email;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function AvatarButton({
+  email,
+  side,
+}: {
+  email: string | null;
+  side: "top";
+}) {
+  const initial = email?.trim().charAt(0).toLocaleUpperCase() || "U";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <SidebarMenuButton
+            aria-label={email ? `Account: ${email}` : "User account"}
+            className="size-11 justify-center rounded-full p-0 hover:bg-neutral-300"
+          />
+        }
+      >
+        <span className="flex size-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+          {initial}
+        </span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" side={side}>
+        <form action={logout}>
+          <DropdownMenuItem
+            variant="destructive"
+            className="w-full justify-start"
+            render={<button type="submit" />}
+          >
+            <LogOut aria-hidden="true" />
+            Sign out
+          </DropdownMenuItem>
+        </form>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+async function SessionAvatarButton({ side }: { side: "top" }) {
+  const email = await getSessionEmail();
+  return <AvatarButton email={email} side={side} />;
+}
+
+function MobileAccountItem({ children }: { children: React.ReactNode }) {
+  return (
+    <SidebarMenuItem className="flex min-w-0 flex-1 justify-center">
+      {children}
+    </SidebarMenuItem>
+  );
+}
 
 type AppShellProps = {
   activePath: (typeof navigationItems)[number]["href"] | "/profile" | "/bookings";
@@ -55,13 +152,18 @@ export function AppShell({ activePath, children }: AppShellProps) {
             </SidebarMenu>
           </nav>
         </SidebarContent>
+        <SidebarFooter className="mt-auto items-center gap-2 p-3">
+          <Suspense fallback={<AvatarButton email={null} side="top" />}>
+            <SessionAvatarButton side="top" />
+          </Suspense>
+        </SidebarFooter>
       </Sidebar>
 
       <Sidebar collapsible="none" className="fixed inset-x-0 bottom-0 z-10 h-auto w-full items-center bg-[#f5f5f5] px-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:hidden">
         <nav aria-label="Main navigation" className="w-full max-w-sm">
-          <SidebarMenu className="flex-row items-center justify-center gap-12">
+          <SidebarMenu className="flex-row items-center gap-0">
             {navigationItems.map(({ label, href, icon: Icon }) => (
-              <SidebarMenuItem key={href}>
+              <SidebarMenuItem className="flex min-w-0 flex-1 justify-center" key={href}>
                 <Tooltip>
                   <TooltipTrigger render={
                     <SidebarMenuButton
@@ -76,6 +178,11 @@ export function AppShell({ activePath, children }: AppShellProps) {
                 </Tooltip>
               </SidebarMenuItem>
             ))}
+            <MobileAccountItem>
+              <Suspense fallback={<AvatarButton email={null} side="top" />}>
+                <SessionAvatarButton side="top" />
+              </Suspense>
+            </MobileAccountItem>
           </SidebarMenu>
         </nav>
       </Sidebar>

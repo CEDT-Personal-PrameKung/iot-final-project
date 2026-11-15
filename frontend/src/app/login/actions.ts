@@ -67,3 +67,9 @@ export async function login(
 
   redirect("/parking");
 }
+
+export async function logout(): Promise<never> {
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE);
+  redirect("/login");
+}
