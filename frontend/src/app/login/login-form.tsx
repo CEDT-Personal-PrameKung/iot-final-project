@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { login } from "@/app/login/actions";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ const initialState = { error: null };
 
 export function LoginForm() {
   const [state, formAction, isPending] = useActionState(login, initialState);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   return (
     <Card className="w-full max-w-sm gap-6 py-6 shadow-sm">
@@ -33,6 +35,8 @@ export function LoginForm() {
               placeholder="you@example.com"
               required
               type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
             />
           </div>
           <div className="space-y-2">
@@ -46,6 +50,8 @@ export function LoginForm() {
               placeholder="Enter your password"
               required
               type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
             />
           </div>
           {state.error && (
