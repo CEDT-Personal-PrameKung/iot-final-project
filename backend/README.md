@@ -20,6 +20,13 @@ with the psycopg 3 driver and provides request-scoped sessions through
 check and returns HTTP 503 if the database is missing or unreachable. The local
 `.env` is ignored by Git.
 
+Set `CORS_ORIGINS` to a comma-separated list of frontend origins allowed to
+call the API from a browser, without trailing slashes (for example,
+`https://your-app.vercel.app`). Set this variable in the backend host's
+environment settings for deployment. Set `BACKEND_API_URL` in the frontend
+host's environment settings to the backend's base URL (for example,
+`https://your-api.onrender.com`).
+
 ## Database migrations
 
 Apply the user schema after configuring `DATABASE_URL`:
