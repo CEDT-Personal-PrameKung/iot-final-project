@@ -1,7 +1,33 @@
 import { Suspense } from "react";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/shared/app-shell";
 import { getBackendHealth } from "@/lib/api/health";
+
+// Session validation depends on request cookies and must block this route.
+export const instant = false;
+
+const SESSION_COOKIE = "smart_parking_access_token";
+const backendApiUrl = process.env.BACKEND_API_URL ?? "http://localhost:8000";
+
+async function hasValidSession(): Promise<boolean> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(new URL("/auth/me", backendApiUrl), {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 
 async function BackendConnectionStatus() {
   const backendHealth = await getBackendHealth();
@@ -33,7 +59,11 @@ function BackendConnectionFallback() {
   );
 }
 
-export default function ParkingPage() {
+export default async function ParkingPage() {
+  if (!(await hasValidSession())) {
+    redirect("/login");
+  }
+
   return (
     <AppShell activePath="/parking">
       <h1 className="type-heading-2">Parking spots</h1>
