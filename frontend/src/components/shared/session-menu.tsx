@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { LogOut } from "lucide-react";
+import { CircleUserRound, LogOut } from "lucide-react";
+import Link from "next/link";
 
 import { logout } from "@/app/login/actions";
 import {
@@ -16,15 +17,35 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { SidebarMenuButton } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type SessionMenuProps = {
   email: string | null;
   side: "top";
+  mobile: boolean;
 };
 
-export function SessionMenu({ email, side }: SessionMenuProps) {
+export function SessionMenu({ email, side, mobile }: SessionMenuProps) {
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const initial = email?.trim().charAt(0).toLocaleUpperCase() || "U";
+
+  if (!email) {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <SidebarMenuButton
+              render={<Link href="/login" aria-label="Sign in" />}
+              className="size-11 justify-center rounded-2xl p-0 hover:bg-neutral-300 [&_svg]:size-6"
+            />
+          }
+        >
+          <CircleUserRound aria-hidden="true" />
+        </TooltipTrigger>
+        <TooltipContent side={side}>Sign in</TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
     <>
@@ -33,13 +54,17 @@ export function SessionMenu({ email, side }: SessionMenuProps) {
           render={
             <SidebarMenuButton
               aria-label={email ? `Account: ${email}` : "User account"}
-              className="size-11 justify-center rounded-full p-0 hover:bg-neutral-300"
+              className="size-11 justify-center rounded-full p-0 hover:bg-neutral-300 [&_svg]:size-6"
             />
           }
         >
-          <span className="flex size-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-            {initial}
-          </span>
+          {mobile ? (
+            <CircleUserRound aria-hidden="true" />
+          ) : (
+            <span className="flex size-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+              {initial}
+            </span>
+          )}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" side={side}>
           <DropdownMenuItem

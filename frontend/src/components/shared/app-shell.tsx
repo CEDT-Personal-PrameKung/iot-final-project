@@ -86,9 +86,15 @@ async function RoleBasedNavigation({
   );
 }
 
-async function SessionAvatarButton({ side }: { side: "top" }) {
+async function SessionAvatarButton({
+  side,
+  mobile,
+}: {
+  side: "top";
+  mobile: boolean;
+}) {
   const user = await getCurrentUser();
-  return <SessionMenu email={user?.email ?? null} side={side} />;
+  return <SessionMenu email={user?.email ?? null} side={side} mobile={mobile} />;
 }
 
 function MobileAccountItem({ children }: { children: React.ReactNode }) {
@@ -137,8 +143,8 @@ export function AppShell({ activePath, children }: AppShellProps) {
           </nav>
         </SidebarContent>
         <SidebarFooter className="mt-auto items-center gap-2 p-3">
-          <Suspense fallback={<SessionMenu email={null} side="top" />}>
-            <SessionAvatarButton side="top" />
+          <Suspense fallback={<SessionMenu email={null} side="top" mobile={false} />}>
+            <SessionAvatarButton side="top" mobile={false} />
           </Suspense>
         </SidebarFooter>
       </Sidebar>
@@ -163,8 +169,8 @@ export function AppShell({ activePath, children }: AppShellProps) {
               />
             </Suspense>
             <MobileAccountItem>
-              <Suspense fallback={<SessionMenu email={null} side="top" />}>
-                <SessionAvatarButton side="top" />
+              <Suspense fallback={<SessionMenu email={null} side="top" mobile />}>
+                <SessionAvatarButton side="top" mobile />
               </Suspense>
             </MobileAccountItem>
           </SidebarMenu>
