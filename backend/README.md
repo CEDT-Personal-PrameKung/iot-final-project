@@ -13,11 +13,15 @@ uv sync
 uv run fastapi dev src/main.py
 ```
 
-Copy `.env.example` to `.env` and fill in the local database, EMQX, and secret
-values as those integrations are configured. The local `.env` is ignored by Git.
+Copy `.env.example` to `.env` and set `DATABASE_URL` to your Neon PostgreSQL
+connection string (including `sslmode=require`). The backend uses SQLAlchemy
+with the psycopg 3 driver and provides request-scoped sessions through
+`src.database.get_db`. The `/health` endpoint runs a database connectivity
+check and returns HTTP 503 if the database is missing or unreachable. The local
+`.env` is ignored by Git.
 
 The API is available at `http://127.0.0.1:8000`; interactive API documentation
-is at `/docs`. The `/health` endpoint provides a basic service health response.
+is at `/docs`.
 
 ## Docker
 
