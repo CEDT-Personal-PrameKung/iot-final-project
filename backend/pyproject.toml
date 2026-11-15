@@ -3,7 +3,7 @@ name = "smart-parking-backend"
 version = "0.1.0"
 description = "FastAPI backend for the Smart Parking IoT application"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.13.0",
     "email-validator>=2.0.0",
@@ -13,4 +13,5 @@ dependencies = [
     "psycopg[binary]>=3.2.0",
     "pwdlib[argon2]>=0.2.0",
     "sqlalchemy>=2.0.0",
+    "scalar-doc>=0.1.8",
 ]

@@ -33,8 +33,8 @@ case-insensitive unique email index, password hash, `admin` or `guest` role
 (defaults to `guest`), active flag, and timestamps. The application does not
 create or alter tables automatically at startup.
 
-The API is available at `http://127.0.0.1:8000`; interactive API documentation
-is at `/docs`.
+The API is available at `http://127.0.0.1:8000`; Scalar API documentation is
+available at `/docs`, backed by FastAPI's `/openapi.json` schema.
 
 Register a guest account with `POST /auth/register` using an email and a
 password of 8–128 characters. Emails are normalized to lowercase, passwords
@@ -65,6 +65,7 @@ image.
 ## Dependencies
 
 - FastAPI provides the HTTP API and development CLI.
+- `scalar_doc` renders the OpenAPI schema as interactive Scalar documentation.
 - Uvicorn serves the application in production.
 - Pydantic Settings is available for environment-based configuration.
 
