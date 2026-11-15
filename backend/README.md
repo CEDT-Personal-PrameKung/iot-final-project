@@ -19,6 +19,21 @@ values as those integrations are configured. The local `.env` is ignored by Git.
 The API is available at `http://127.0.0.1:8000`; interactive API documentation
 is at `/docs`. The `/health` endpoint provides a basic service health response.
 
+## Docker
+
+From the repository root, create `backend/.env` from the example if needed and
+start the backend container:
+
+```sh
+cp -n backend/.env.example backend/.env
+docker compose up --build backend
+```
+
+The container runs as a non-root user. Compose maps local port `8000`; on Render,
+the server uses the platform-provided `PORT`. Compose reads local configuration
+from `backend/.env`, and the Docker build excludes environment files from the
+image.
+
 ## Dependencies
 
 - FastAPI provides the HTTP API and development CLI.
