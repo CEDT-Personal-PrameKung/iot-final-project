@@ -36,6 +36,11 @@ create or alter tables automatically at startup.
 The API is available at `http://127.0.0.1:8000`; interactive API documentation
 is at `/docs`.
 
+Register a guest account with `POST /auth/register` using an email and a
+password of 8–128 characters. Emails are normalized to lowercase, passwords
+are stored as Argon2 hashes, and duplicate emails return HTTP 409. The endpoint
+does not accept a role; public registrations always receive the `guest` role.
+
 ## Docker
 
 From the repository root, create `backend/.env` from the example if needed and
