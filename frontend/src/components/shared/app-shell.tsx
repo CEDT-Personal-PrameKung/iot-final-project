@@ -1,15 +1,9 @@
 import { Suspense } from "react";
 import { cookies } from "next/headers";
-import { LayoutGrid, LogOut, Settings, Triangle } from "lucide-react";
+import { LayoutGrid, Settings, Triangle } from "lucide-react";
 import Link from "next/link";
 
-import { logout } from "@/app/login/actions";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { SessionMenu } from "@/components/shared/session-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -63,48 +57,9 @@ async function getSessionEmail(): Promise<string | null> {
   return null;
 }
 
-function AvatarButton({
-  email,
-  side,
-}: {
-  email: string | null;
-  side: "top";
-}) {
-  const initial = email?.trim().charAt(0).toLocaleUpperCase() || "U";
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <SidebarMenuButton
-            aria-label={email ? `Account: ${email}` : "User account"}
-            className="size-11 justify-center rounded-full p-0 hover:bg-neutral-300"
-          />
-        }
-      >
-        <span className="flex size-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-          {initial}
-        </span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" side={side}>
-        <form action={logout}>
-          <DropdownMenuItem
-            variant="destructive"
-            className="w-full justify-start"
-            render={<button type="submit" />}
-          >
-            <LogOut aria-hidden="true" />
-            Sign out
-          </DropdownMenuItem>
-        </form>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 async function SessionAvatarButton({ side }: { side: "top" }) {
   const email = await getSessionEmail();
-  return <AvatarButton email={email} side={side} />;
+  return <SessionMenu email={email} side={side} />;
 }
 
 function MobileAccountItem({ children }: { children: React.ReactNode }) {
@@ -153,7 +108,7 @@ export function AppShell({ activePath, children }: AppShellProps) {
           </nav>
         </SidebarContent>
         <SidebarFooter className="mt-auto items-center gap-2 p-3">
-          <Suspense fallback={<AvatarButton email={null} side="top" />}>
+          <Suspense fallback={<SessionMenu email={null} side="top" />}>
             <SessionAvatarButton side="top" />
           </Suspense>
         </SidebarFooter>
@@ -179,7 +134,7 @@ export function AppShell({ activePath, children }: AppShellProps) {
               </SidebarMenuItem>
             ))}
             <MobileAccountItem>
-              <Suspense fallback={<AvatarButton email={null} side="top" />}>
+              <Suspense fallback={<SessionMenu email={null} side="top" />}>
                 <SessionAvatarButton side="top" />
               </Suspense>
             </MobileAccountItem>
