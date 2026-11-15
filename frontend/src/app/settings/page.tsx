@@ -1,6 +1,16 @@
-import { AppShell } from "@/components/shared/app-shell";
+import { redirect } from "next/navigation";
 
-export default function SettingsPage() {
+import { AppShell } from "@/components/shared/app-shell";
+import { getCurrentUser } from "@/lib/auth";
+
+export const instant = false;
+
+export default async function SettingsPage() {
+  const user = await getCurrentUser();
+  if (user?.role !== "admin") {
+    redirect("/parking");
+  }
+
   return (
     <AppShell activePath="/settings">
       <h1 className="type-heading-2">Settings</h1>

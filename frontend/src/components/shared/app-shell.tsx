@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { cookies } from "next/headers";
 import { LayoutGrid, Settings, Triangle } from "lucide-react";
 import Link from "next/link";
 
@@ -16,50 +15,80 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { getCurrentUser } from "@/lib/auth";
 
 const navigationItems = [
   { label: "Parking", href: "/parking", icon: LayoutGrid },
   { label: "Settings", href: "/settings", icon: Settings },
 ] as const;
 
-const SESSION_COOKIE = "smart_parking_access_token";
-const backendApiUrl = process.env.BACKEND_API_URL ?? "http://localhost:8000";
+function SidebarNavigationItems({
+  activePath,
+  side,
+  mobile,
+  items,
+}: {
+  activePath: string;
+  side: "top" | "right";
+  mobile: boolean;
+  items: ReadonlyArray<(typeof navigationItems)[number]>;
+}) {
+  return items.map(({ label, href, icon: Icon }) => (
+    <SidebarMenuItem
+      className={mobile ? "flex min-w-0 flex-1 justify-center" : undefined}
+      key={href}
+    >
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <SidebarMenuButton
+              render={
+                <Link
+                  href={href}
+                  aria-label={label}
+                  aria-current={activePath === href ? "page" : undefined}
+                />
+              }
+              isActive={activePath === href}
+              className="size-11 justify-center rounded-2xl p-0 hover:bg-neutral-300 data-active:bg-[#e5e5e5] [&_svg]:size-6"
+            />
+          }
+        >
+          <Icon className="fill-current [&_circle]:fill-[#f5f5f5]" strokeWidth={1} aria-hidden="true" />
+        </TooltipTrigger>
+        <TooltipContent side={side}>{label}</TooltipContent>
+      </Tooltip>
+    </SidebarMenuItem>
+  ));
+}
 
-async function getSessionEmail(): Promise<string | null> {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!token) {
-    return null;
-  }
+async function RoleBasedNavigation({
+  activePath,
+  side,
+  mobile,
+}: {
+  activePath: string;
+  side: "top" | "right";
+  mobile: boolean;
+}) {
+  const user = await getCurrentUser();
+  const items = navigationItems.filter(
+    ({ href }) => href === "/parking" || user?.role === "admin",
+  );
 
-  try {
-    const response = await fetch(new URL("/auth/me", backendApiUrl), {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) {
-      return null;
-    }
-
-    const payload: unknown = await response.json();
-    if (
-      typeof payload === "object" &&
-      payload !== null &&
-      "email" in payload &&
-      typeof payload.email === "string"
-    ) {
-      return payload.email;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
+  return (
+    <SidebarNavigationItems
+      activePath={activePath}
+      side={side}
+      mobile={mobile}
+      items={items}
+    />
+  );
 }
 
 async function SessionAvatarButton({ side }: { side: "top" }) {
-  const email = await getSessionEmail();
-  return <SessionMenu email={email} side={side} />;
+  const user = await getCurrentUser();
+  return <SessionMenu email={user?.email ?? null} side={side} />;
 }
 
 function MobileAccountItem({ children }: { children: React.ReactNode }) {
@@ -88,22 +117,22 @@ export function AppShell({ activePath, children }: AppShellProps) {
         <SidebarContent className="pointer-events-none absolute inset-0 justify-center px-4">
           <nav aria-label="Main navigation" className="pointer-events-auto">
             <SidebarMenu className="gap-4">
-              {navigationItems.map(({ label, href, icon: Icon }) => (
-                <SidebarMenuItem key={href}>
-                  <Tooltip>
-                    <TooltipTrigger render={
-                      <SidebarMenuButton
-                        render={<Link href={href} aria-label={label} aria-current={activePath === href ? "page" : undefined} />}
-                        isActive={activePath === href}
-                        className="size-11 justify-center rounded-2xl p-0 hover:bg-neutral-300 data-active:bg-[#e5e5e5] [&_svg]:size-6"
-                      />
-                    }>
-                      <Icon className="fill-current [&_circle]:fill-[#f5f5f5]" strokeWidth={1} aria-hidden="true" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right">{label}</TooltipContent>
-                  </Tooltip>
-                </SidebarMenuItem>
-              ))}
+              <Suspense
+                fallback={
+                  <SidebarNavigationItems
+                    activePath={activePath}
+                    side="right"
+                    mobile={false}
+                    items={[navigationItems[0]]}
+                  />
+                }
+              >
+                <RoleBasedNavigation
+                  activePath={activePath}
+                  side="right"
+                  mobile={false}
+                />
+              </Suspense>
             </SidebarMenu>
           </nav>
         </SidebarContent>
@@ -117,22 +146,22 @@ export function AppShell({ activePath, children }: AppShellProps) {
       <Sidebar collapsible="none" className="fixed inset-x-0 bottom-0 z-10 h-auto w-full items-center bg-[#f5f5f5] px-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:hidden">
         <nav aria-label="Main navigation" className="w-full max-w-sm">
           <SidebarMenu className="flex-row items-center gap-0">
-            {navigationItems.map(({ label, href, icon: Icon }) => (
-              <SidebarMenuItem className="flex min-w-0 flex-1 justify-center" key={href}>
-                <Tooltip>
-                  <TooltipTrigger render={
-                    <SidebarMenuButton
-                      render={<Link href={href} aria-label={label} aria-current={activePath === href ? "page" : undefined} />}
-                      isActive={activePath === href}
-                      className="size-11 justify-center rounded-2xl p-0 hover:bg-neutral-300 data-active:bg-[#e5e5e5] [&_svg]:size-6"
-                    />
-                  }>
-                    <Icon className="fill-current [&_circle]:fill-[#f5f5f5]" strokeWidth={1} aria-hidden="true" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top">{label}</TooltipContent>
-                </Tooltip>
-              </SidebarMenuItem>
-            ))}
+            <Suspense
+              fallback={
+                <SidebarNavigationItems
+                  activePath={activePath}
+                  side="top"
+                  mobile
+                  items={[navigationItems[0]]}
+                />
+              }
+            >
+              <RoleBasedNavigation
+                activePath={activePath}
+                side="top"
+                mobile
+              />
+            </Suspense>
             <MobileAccountItem>
               <Suspense fallback={<SessionMenu email={null} side="top" />}>
                 <SessionAvatarButton side="top" />
