@@ -20,6 +20,19 @@ with the psycopg 3 driver and provides request-scoped sessions through
 check and returns HTTP 503 if the database is missing or unreachable. The local
 `.env` is ignored by Git.
 
+## Database migrations
+
+Apply the user schema after configuring `DATABASE_URL`:
+
+```sh
+uv run alembic upgrade head
+```
+
+The migrations create the `users` table with a UUID primary key,
+case-insensitive unique email index, password hash, `admin` or `guest` role
+(defaults to `guest`), active flag, and timestamps. The application does not
+create or alter tables automatically at startup.
+
 The API is available at `http://127.0.0.1:8000`; interactive API documentation
 is at `/docs`.
 

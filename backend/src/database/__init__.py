@@ -6,6 +6,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from src.database.base import Base
+from src.database.models import User, UserRole
 from src.settings import get_settings
 
 
@@ -42,4 +44,4 @@ def get_db() -> Generator[Session, None, None]:
         yield session
 
 
-__all__ = ["Session", "engine", "get_db"]
+__all__ = ["Base", "Session", "User", "UserRole", "engine", "get_db"]

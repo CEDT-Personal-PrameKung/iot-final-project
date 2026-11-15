@@ -5,6 +5,7 @@ description = "FastAPI backend for the Smart Parking IoT application"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.13.0",
     "fastapi[standard]>=0.163.1",
     "pydantic-settings>=2.16.3",
     "psycopg[binary]>=3.2.0",
