@@ -22,10 +22,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 type SessionMenuProps = {
   email: string | null;
   side: "top";
-  mobile: boolean;
 };
 
-export function SessionMenu({ email, side, mobile }: SessionMenuProps) {
+export function SessionMenu({ email, side }: SessionMenuProps) {
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const initial = email?.trim().charAt(0).toLocaleUpperCase() || "U";
 
@@ -58,13 +57,9 @@ export function SessionMenu({ email, side, mobile }: SessionMenuProps) {
             />
           }
         >
-          {mobile ? (
-            <CircleUserRound aria-hidden="true" />
-          ) : (
-            <span className="flex size-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-              {initial}
-            </span>
-          )}
+          <span className="flex size-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+            {initial}
+          </span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" side={side}>
           <DropdownMenuItem
