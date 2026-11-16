@@ -1,8 +1,24 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
 import { getSessionUser } from "@/features/auth/session";
 
-export default async function SettingPage() {
+export default function SettingPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          aria-busy="true"
+          className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10"
+        />
+      }
+    >
+      <AdminSettingsPage />
+    </Suspense>
+  );
+}
+
+async function AdminSettingsPage() {
   const sessionUser = await getSessionUser();
 
   if (!sessionUser) {
