@@ -31,14 +31,16 @@ export default async function DashboardLayout({
             >
               Parking
             </Button>
-            <Button
-              nativeButton={false}
-              render={<Link href="/setting" />}
-              variant="ghost"
-            >
-              <Settings aria-hidden="true" data-icon="inline-start" />
-              Setting
-            </Button>
+            {sessionUser?.role === "admin" && (
+              <Button
+                nativeButton={false}
+                render={<Link href="/setting" />}
+                variant="ghost"
+              >
+                <Settings aria-hidden="true" data-icon="inline-start" />
+                Setting
+              </Button>
+            )}
             {sessionUser ? (
               <AccountMenu
                 initial={sessionUser.email.charAt(0).toUpperCase()}
