@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 
-import { AppShell } from "@/components/shared/app-shell";
 import { getBackendHealth } from "@/lib/api/health";
 
 async function BackendConnectionStatus() {
@@ -35,11 +34,11 @@ function BackendConnectionFallback() {
 
 export default function ParkingPage() {
   return (
-    <AppShell activePath="/parking">
+    <>
       <h1 className="type-heading-2">Parking spots</h1>
       <Suspense fallback={<BackendConnectionFallback />}>
         <BackendConnectionStatus />
       </Suspense>
-    </AppShell>
+    </>
   );
 }

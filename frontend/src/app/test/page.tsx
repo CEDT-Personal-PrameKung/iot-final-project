@@ -1,1 +1,1 @@
-export { default } from "../parking/page";
+export { default } from "../(dashboard)/parking/page";
