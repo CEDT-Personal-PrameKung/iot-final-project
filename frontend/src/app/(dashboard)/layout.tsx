@@ -2,14 +2,15 @@ import Link from "next/link";
 import { CarFront, LogIn, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { getSessionEmail } from "@/features/auth/session";
+import { AccountMenu } from "@/features/auth/account-menu";
+import { getSessionUser } from "@/features/auth/session";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const sessionEmail = await getSessionEmail();
+  const sessionUser = await getSessionUser();
 
   return (
     <div className="min-h-screen bg-background">
@@ -38,16 +39,12 @@ export default async function DashboardLayout({
               <Settings aria-hidden="true" data-icon="inline-start" />
               Setting
             </Button>
-            {sessionEmail ? (
-              <Button
-                type="button"
-                aria-label="Account"
-                title="Account"
-                size="icon"
-                className="rounded-full"
-              >
-                {sessionEmail.charAt(0).toUpperCase()}
-              </Button>
+            {sessionUser ? (
+              <AccountMenu
+                initial={sessionUser.email.charAt(0).toUpperCase()}
+                email={sessionUser.email}
+                role={sessionUser.role}
+              />
             ) : (
               <Button
                 nativeButton={false}

@@ -179,3 +179,9 @@ export async function register(
   await setSession(accessToken);
   redirect("/parking");
 }
+
+export async function logout(): Promise<never> {
+  const cookieStore = await cookies();
+  cookieStore.delete(sessionCookie);
+  redirect("/login");
+}

@@ -5,7 +5,12 @@ import { cookies } from "next/headers";
 const backendApiUrl = process.env.BACKEND_API_URL ?? "http://localhost:8000";
 const sessionCookie = "smart_parking_access_token";
 
-export async function getSessionEmail(): Promise<string | null> {
+export type SessionUser = {
+  email: string;
+  role: "admin" | "guest";
+};
+
+export async function getSessionUser(): Promise<SessionUser | null> {
   const accessToken = (await cookies()).get(sessionCookie)?.value;
   if (!accessToken) {
     return null;
@@ -28,9 +33,11 @@ export async function getSessionEmail(): Promise<string | null> {
       user !== null &&
       "email" in user &&
       typeof user.email === "string" &&
-      user.email.length > 0
+      user.email.length > 0 &&
+      "role" in user &&
+      (user.role === "admin" || user.role === "guest")
     ) {
-      return user.email;
+      return { email: user.email, role: user.role };
     }
 
     return null;
