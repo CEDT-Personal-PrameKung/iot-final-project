@@ -81,7 +81,7 @@ export async function login(
   }
 
   await setSession(accessToken);
-  redirect("/");
+  redirect("/parking");
 }
 
 export async function register(
@@ -177,5 +177,5 @@ export async function register(
   }
 
   await setSession(accessToken);
-  redirect("/");
+  redirect("/parking");
 }
