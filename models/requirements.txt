@@ -1,0 +1,4 @@
+# Install PyTorch with the correct CUDA build FIRST (see README.md), then:
+#   pip install -r requirements.txt
+ultralytics==8.4.215
+roboflow==1.7.3

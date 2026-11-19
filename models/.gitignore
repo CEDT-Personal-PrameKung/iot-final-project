@@ -1,0 +1,20 @@
+# Downloaded datasets
+datasets/
+
+# Training runs and outputs
+runs/
+outputs/
+wandb/
+
+# Model weights
+*.pt
+*.onnx
+*.engine
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Secrets
+.env
