@@ -1,18 +1,33 @@
 #include <Arduino.h>
 
-// put function declarations here:
-int myFunction(int, int);
+#ifndef RGB_BUILTIN
+#define RGB_BUILTIN 48
+#endif
+
+constexpr unsigned long kSerialBaud = 115200;
+constexpr unsigned long kColorDurationMs = 1000;
 
 void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+  Serial.begin(kSerialBaud);
+  delay(1000);
+  Serial.println("YD-ESP32-23 board test started");
+  Serial.println("The onboard RGB LED should cycle red, green, blue, then off.");
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-}
+  neopixelWrite(RGB_BUILTIN, 255, 0, 0);
+  Serial.println("RGB: red");
+  delay(kColorDurationMs);
 
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+  neopixelWrite(RGB_BUILTIN, 0, 255, 0);
+  Serial.println("RGB: green");
+  delay(kColorDurationMs);
+
+  neopixelWrite(RGB_BUILTIN, 0, 0, 255);
+  Serial.println("RGB: blue");
+  delay(kColorDurationMs);
+
+  neopixelWrite(RGB_BUILTIN, 0, 0, 0);
+  Serial.println("RGB: off");
+  delay(kColorDurationMs);
 }
