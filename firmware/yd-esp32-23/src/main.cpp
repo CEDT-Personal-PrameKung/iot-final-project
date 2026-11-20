@@ -1,33 +1,21 @@
 #include <Arduino.h>
+#include <ESP32Servo.h>
 
-#ifndef RGB_BUILTIN
-#define RGB_BUILTIN 48
-#endif
+constexpr int SERVO_PIN = 6;
+constexpr int MIN_PULSE_US = 600;
+constexpr int MAX_PULSE_US = 2400;
+constexpr unsigned long HOLD_MS = 2000;
 
-constexpr unsigned long kSerialBaud = 115200;
-constexpr unsigned long kColorDurationMs = 1000;
+Servo servo;
 
 void setup() {
-  Serial.begin(kSerialBaud);
-  delay(1000);
-  Serial.println("YD-ESP32-23 board test started");
-  Serial.println("The onboard RGB LED should cycle red, green, blue, then off.");
+  servo.setPeriodHertz(50);
+  servo.attach(SERVO_PIN, MIN_PULSE_US, MAX_PULSE_US);
 }
 
 void loop() {
-  neopixelWrite(RGB_BUILTIN, 255, 0, 0);
-  Serial.println("RGB: red");
-  delay(kColorDurationMs);
-
-  neopixelWrite(RGB_BUILTIN, 0, 255, 0);
-  Serial.println("RGB: green");
-  delay(kColorDurationMs);
-
-  neopixelWrite(RGB_BUILTIN, 0, 0, 255);
-  Serial.println("RGB: blue");
-  delay(kColorDurationMs);
-
-  neopixelWrite(RGB_BUILTIN, 0, 0, 0);
-  Serial.println("RGB: off");
-  delay(kColorDurationMs);
+  servo.write(0);
+  delay(HOLD_MS);
+  servo.write(180);
+  delay(HOLD_MS);
 }
