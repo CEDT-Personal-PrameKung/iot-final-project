@@ -52,14 +52,7 @@ function ParkingDashboardSkeleton() {
         <Skeleton className="h-28 rounded-xl" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Skeleton className="h-52 rounded-xl" />
-        <Skeleton className="h-52 rounded-xl" />
-        <Skeleton className="h-52 rounded-xl" />
-        <Skeleton className="h-52 rounded-xl" />
-        <Skeleton className="h-52 rounded-xl" />
-        <Skeleton className="h-52 rounded-xl" />
-      </div>
+      <Skeleton className="h-96 rounded-2xl" />
     </main>
   );
 }
