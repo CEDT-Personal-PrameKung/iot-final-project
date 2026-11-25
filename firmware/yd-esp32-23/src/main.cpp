@@ -1,21 +1,36 @@
 #include <Arduino.h>
-#include <ESP32Servo.h>
+#include <Adafruit_BME280.h>
+#include <Wire.h>
 
-constexpr int SERVO_PIN = 6;
-constexpr int MIN_PULSE_US = 600;
-constexpr int MAX_PULSE_US = 2400;
-constexpr unsigned long HOLD_MS = 2000;
+namespace {
+constexpr int SDA_PIN = 8;
+constexpr int SCL_PIN = 9;
+constexpr unsigned long SAMPLE_INTERVAL_MS = 1000;
 
-Servo servo;
+Adafruit_BME280 bme;
+bool bmeReady = false;
+}
 
 void setup() {
-  servo.setPeriodHertz(50);
-  servo.attach(SERVO_PIN, MIN_PULSE_US, MAX_PULSE_US);
+  Serial.begin(115200);
+  bmeReady = Wire.begin(SDA_PIN, SCL_PIN) && bme.begin(BME280_ADDRESS_ALTERNATE);
+  if (!bmeReady) {
+    Serial.println("BME280 initialization failed at 0x76 (SDA GPIO8, SCL GPIO9)");
+  }
 }
 
 void loop() {
-  servo.write(0);
-  delay(HOLD_MS);
-  servo.write(180);
-  delay(HOLD_MS);
+  if (bmeReady) {
+    const float temperatureC = bme.readTemperature();
+    const float pressureHpa = bme.readPressure() / 100.0f;
+    const float humidityPercent = bme.readHumidity();
+
+    if (isfinite(temperatureC) && isfinite(pressureHpa) && isfinite(humidityPercent)) {
+      Serial.printf("Temperature: %.2f C | Pressure: %.2f hPa | Humidity: %.2f %%\n",
+                    temperatureC, pressureHpa, humidityPercent);
+    } else {
+      Serial.println("BME280 read failed");
+    }
+  }
+  delay(SAMPLE_INTERVAL_MS);
 }
