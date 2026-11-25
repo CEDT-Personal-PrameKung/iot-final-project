@@ -21,10 +21,12 @@ check Tiger Cloud. Each endpoint returns HTTP 200 if its database is reachable,
 or HTTP 503 if it is missing or unreachable. The existing `/health` endpoint
 also checks Neon. The local `.env` is ignored by Git.
 
-Set `CORS_ORIGINS` to a comma-separated list of frontend origins allowed to
-call the API from a browser, without trailing slashes (for example,
-`https://your-app.vercel.app`). Set this variable in the backend host's
-environment settings for deployment. Set `BACKEND_API_URL` in the frontend
+In development, an empty `CORS_ORIGINS` allows the Next.js frontend at
+`http://localhost:3000` and `http://127.0.0.1:3000`. An explicit
+`CORS_ORIGINS` overrides these defaults. For deployment, set
+`APP_ENV=production` and set `CORS_ORIGINS` in the backend host's environment
+to a comma-separated list of frontend origins, without trailing slashes
+(for example, `https://your-app.vercel.app`). Set `BACKEND_API_URL` in the frontend
 host's environment settings to the backend's base URL (for example,
 `https://your-api.onrender.com`).
 

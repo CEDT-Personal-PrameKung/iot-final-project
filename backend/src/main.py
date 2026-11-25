@@ -11,6 +11,8 @@ cors_origins = [
     for origin in settings.cors_origins.split(",")
     if origin.strip()
 ]
+if not cors_origins and settings.app_env == "development":
+    cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 app = FastAPI(
     title="Smart Parking API",
