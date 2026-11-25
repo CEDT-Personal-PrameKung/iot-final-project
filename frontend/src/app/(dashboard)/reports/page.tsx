@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { getSessionUser } from "@/features/auth/session";
 import { ReportsDashboard } from "@/features/reports/reports-dashboard";
 import { getActivityReports } from "@/lib/api/reports";
 
@@ -14,12 +16,22 @@ export const metadata: Metadata = {
 export default function ReportsPage() {
   return (
     <Suspense fallback={<ReportsPageSkeleton />}>
-      <ReportsPageContent />
+      <AdminReportsPage />
     </Suspense>
   );
 }
 
-async function ReportsPageContent() {
+async function AdminReportsPage() {
+  const sessionUser = await getSessionUser();
+
+  if (!sessionUser) {
+    redirect("/login");
+  }
+
+  if (sessionUser.role !== "admin") {
+    redirect("/parking");
+  }
+
   const snapshot = await getActivityReports();
   return <ReportsDashboard initialSnapshot={snapshot} />;
 }

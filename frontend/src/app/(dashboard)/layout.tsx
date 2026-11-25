@@ -26,10 +26,6 @@ export default function DashboardLayout({
           </Link>
           <nav aria-label="Main navigation" className="flex items-center gap-2">
             <NavLink href="/parking">Parking</NavLink>
-            <NavLink href="/reports">
-              <FileText aria-hidden="true" data-icon="inline-start" />
-              Reports
-            </NavLink>
             <Suspense
               fallback={
                 <span
@@ -55,10 +51,16 @@ async function SessionNavigation() {
   return (
     <>
       {sessionUser?.role === "admin" && (
-        <NavLink href="/configs">
-          <Settings aria-hidden="true" data-icon="inline-start" />
-          Configs
-        </NavLink>
+        <>
+          <NavLink href="/reports">
+            <FileText aria-hidden="true" data-icon="inline-start" />
+            Reports
+          </NavLink>
+          <NavLink href="/configs">
+            <Settings aria-hidden="true" data-icon="inline-start" />
+            Configs
+          </NavLink>
+        </>
       )}
       {sessionUser ? (
         <AccountMenu

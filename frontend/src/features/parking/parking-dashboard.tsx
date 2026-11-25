@@ -237,6 +237,7 @@ export function ParkingDashboard({
       <AnalyticsActivitySection
         occupancyHistory={snapshot.occupancyHistory}
         recentActivity={snapshot.recentActivity}
+        isAdmin={isAdmin}
         onSelectSlotId={setSelectedSlotId}
       />
 

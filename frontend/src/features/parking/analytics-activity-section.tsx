@@ -86,12 +86,14 @@ const activityMeta: Record<
 interface AnalyticsActivitySectionProps {
   occupancyHistory: OccupancyTrendPoint[];
   recentActivity: ParkingActivityEvent[];
+  isAdmin: boolean;
   onSelectSlotId: (slotId: string) => void;
 }
 
 export function AnalyticsActivitySection({
   occupancyHistory,
   recentActivity,
+  isAdmin,
   onSelectSlotId,
 }: AnalyticsActivitySectionProps) {
   const gradientId = useId().replace(/:/g, "");
@@ -260,12 +262,14 @@ export function AnalyticsActivitySection({
               <Badge variant="secondary" className="tabular-nums">
                 {visibleActivity.length}
               </Badge>
-              <Link
-                href="/reports"
-                className="text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-              >
-                View all
-              </Link>
+              {isAdmin && (
+                <Link
+                  href="/reports"
+                  className="text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                >
+                  View all
+                </Link>
+              )}
             </div>
           </div>
         </CardHeader>
