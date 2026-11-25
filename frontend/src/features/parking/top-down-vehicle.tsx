@@ -7,11 +7,13 @@ import type { VehicleType } from "@/types/parking";
 
 interface TopDownVehicleProps {
   vehicleType?: VehicleType;
+  facing?: "up" | "down";
   className?: string;
 }
 
 export function TopDownVehicle({
   vehicleType = "car",
+  facing = "up",
   className,
 }: TopDownVehicleProps) {
   const uid = useId().replace(/:/g, "");
@@ -19,6 +21,8 @@ export function TopDownVehicle({
   const roofGradId = `${uid}-roof`;
   const glassGradId = `${uid}-glass`;
   const shadowId = `${uid}-shadow`;
+  const orientationTransform =
+    facing === "down" ? "rotate(180 60 110)" : undefined;
 
   if (vehicleType === "motorcycle") {
     return (
@@ -54,7 +58,8 @@ export function TopDownVehicle({
         </defs>
 
         <g filter={`url(#${shadowId})`}>
-          {/* Front & rear tires */}
+          <g transform={orientationTransform}>
+            {/* Front & rear tires */}
           <rect x="52" y="28" width="16" height="36" rx="8" fill="#1f2329" />
           <rect x="50" y="156" width="20" height="38" rx="9" fill="#1f2329" />
 
@@ -95,6 +100,7 @@ export function TopDownVehicle({
           {/* Headlight & taillight */}
           <ellipse cx="60" cy="43" rx="6" ry="2.5" fill="#e5e7eb" />
           <rect x="54" y="177" width="12" height="4" rx="2" fill="#dc2626" />
+          </g>
         </g>
       </svg>
     );
@@ -140,7 +146,8 @@ export function TopDownVehicle({
       </defs>
 
       <g filter={`url(#${shadowId})`}>
-        {/* Side wing mirrors */}
+        <g transform={orientationTransform}>
+          {/* Side wing mirrors */}
         <path
           d="M23 73 L12 77 C10.5 77.5, 10.5 81.5, 12.5 82.5 L23 84 Z"
           fill="#e8eaee"
@@ -373,6 +380,7 @@ export function TopDownVehicle({
           strokeWidth="1.2"
           strokeLinecap="round"
         />
+        </g>
       </g>
     </svg>
   );
