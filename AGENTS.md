@@ -94,6 +94,9 @@ The following topics are the initial project convention. Update this section if 
 |---|---|---|---|
 | `parking/sensor/ultrasonic` | ESP32-S3 | Raspberry Pi 5, backend | Distance readings |
 | `parking/sensor/ir` | ESP32-S3 | Raspberry Pi 5, backend | Obstacle detection |
+| `parking/sensor/environment` | YD-ESP32-23 | Raspberry Pi 5 | [LDR and BME280 readings](docs/architecture/esp32-telemetry.md) |
+| `parking/lighting/status` | YD-ESP32-23 | Raspberry Pi 5 | State of the three parking lights |
+| `parking/control/lighting` | Raspberry Pi 5 | YD-ESP32-23 | Turn the three parking lights on or off |
 | `parking/gateway/environment` | Raspberry Pi 5 | Backend | BME280 readings |
 | `parking/gateway/light` | Raspberry Pi 5 | Backend | LDR readings |
 | `parking/gateway/camera` | Raspberry Pi 5 | Backend | Vehicle detection metadata |

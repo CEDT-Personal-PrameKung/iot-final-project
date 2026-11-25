@@ -2,6 +2,8 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
+#include "telemetry.h"
+
 namespace {
 constexpr int LDR_PIN = 4;  // ADC1
 constexpr int SDA_PIN = 8;
@@ -26,10 +28,12 @@ void setup() {
   if (!bmeReady) {
     Serial.println("BME280 initialization failed at 0x76 (SDA GPIO8, SCL GPIO9)");
   }
+  telemetry::begin();
   lastSample = millis() - SAMPLE_INTERVAL_MS;
 }
 
 void loop() {
+  telemetry::update();
   const unsigned long now = millis();
   if (now - lastSample < SAMPLE_INTERVAL_MS) {
     delay(1);
@@ -38,18 +42,18 @@ void loop() {
   lastSample = now;
 
   const int lightReading = analogRead(LDR_PIN);
-  const bool ledsOn = lightReading > LDR_THRESHOLD;
+  const bool ledsOn = telemetry::resolveLighting(lightReading > LDR_THRESHOLD);
   for (const int pin : LED_PINS) {
     digitalWrite(pin, ledsOn ? HIGH : LOW);
   }
   Serial.printf("LDR raw: %d / 4095 | LEDs: %s", lightReading,
                 ledsOn ? "on" : "off");
 
-  if (bmeReady) {
-    const float temperatureC = bme.readTemperature();
-    const float pressureHpa = bme.readPressure() / 100.0f;
-    const float humidityPercent = bme.readHumidity();
+  const float temperatureC = bmeReady ? bme.readTemperature() : NAN;
+  const float pressureHpa = bmeReady ? bme.readPressure() / 100.0f : NAN;
+  const float humidityPercent = bmeReady ? bme.readHumidity() : NAN;
 
+  if (bmeReady) {
     if (isfinite(temperatureC) && isfinite(pressureHpa) && isfinite(humidityPercent)) {
       Serial.printf(" | Temperature: %.2f C | Pressure: %.2f hPa | Humidity: %.2f %%",
                     temperatureC, pressureHpa, humidityPercent);
@@ -58,4 +62,5 @@ void loop() {
     }
   }
   Serial.println();
+  telemetry::publish(lightReading, ledsOn, temperatureC, pressureHpa, humidityPercent);
 }
