@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/table";
 import { formatTelemetryTime } from "@/features/parking/formatters";
 import { cn } from "@/lib/utils";
-import type { GatewayNodeStatus, ManagedBayConfig } from "@/types/settings";
+import type { GatewayNodeStatus, ManagedBayConfig } from "@/types/configs";
 
 interface BaysDevicesSectionProps {
   bays: ManagedBayConfig[];

@@ -1,6 +1,6 @@
-import type { ParkingSettingsSnapshot } from "@/types/settings";
+import type { ParkingConfigsSnapshot } from "@/types/configs";
 
-export const MOCK_ADMIN_SETTINGS: ParkingSettingsSnapshot = {
+export const MOCK_ADMIN_CONFIGS: ParkingConfigsSnapshot = {
   dataSource: "mock",
   updatedAt: "2026-11-25T15:30:00.000Z",
   sensors: {

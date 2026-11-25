@@ -25,23 +25,23 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import type {
-  LightingAutomationSettings,
+  LightingAutomationConfigs,
   LightingControlMode,
-} from "@/types/settings";
+} from "@/types/configs";
 
-interface LightingSettingsCardProps {
-  value: LightingAutomationSettings;
-  onChange: (next: LightingAutomationSettings) => void;
+interface LightingConfigsCardProps {
+  value: LightingAutomationConfigs;
+  onChange: (next: LightingAutomationConfigs) => void;
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export function LightingSettingsCard({
+export function LightingConfigsCard({
   value,
   onChange,
-}: LightingSettingsCardProps) {
+}: LightingConfigsCardProps) {
   const handleGlobalModeChange = (mode: LightingControlMode) => {
     onChange({
       ...value,

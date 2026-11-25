@@ -17,7 +17,7 @@ export interface ManagedLightConfig {
   topic: string;
 }
 
-export interface LightingAutomationSettings {
+export interface LightingAutomationConfigs {
   globalMode: LightingControlMode;
   ldrTurnOnLux: number;
   ldrTurnOffLux: number;
@@ -45,9 +45,9 @@ export interface GatewayNodeStatus {
   lastSeenAt: string;
 }
 
-export interface ParkingSettingsSnapshot {
+export interface ParkingConfigsSnapshot {
   sensors: SensorThresholds;
-  lighting: LightingAutomationSettings;
+  lighting: LightingAutomationConfigs;
   bays: ManagedBayConfig[];
   gateways: GatewayNodeStatus[];
   updatedAt: string;

@@ -4,24 +4,24 @@ import { redirect } from "next/navigation";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { getSessionUser } from "@/features/auth/session";
-import { SettingsDashboard } from "@/features/settings/settings-dashboard";
-import { getAdminSettings } from "@/lib/api/settings";
+import { ConfigsDashboard } from "@/features/configs/configs-dashboard";
+import { getAdminConfigs } from "@/lib/api/configs";
 
 export const metadata: Metadata = {
-  title: "Settings",
+  title: "Configs",
   description:
     "Configure Smart Parking sensor thresholds, lighting automation, and edge devices.",
 };
 
-export default function SettingPage() {
+export default function ConfigsPage() {
   return (
-    <Suspense fallback={<SettingsPageSkeleton />}>
-      <AdminSettingsPage />
+    <Suspense fallback={<ConfigsPageSkeleton />}>
+      <AdminConfigsPage />
     </Suspense>
   );
 }
 
-async function AdminSettingsPage() {
+async function AdminConfigsPage() {
   const sessionUser = await getSessionUser();
 
   if (!sessionUser) {
@@ -32,17 +32,17 @@ async function AdminSettingsPage() {
     redirect("/parking");
   }
 
-  const settings = await getAdminSettings();
+  const configs = await getAdminConfigs();
 
   return (
-    <SettingsDashboard
-      initialSettings={settings}
+    <ConfigsDashboard
+      initialConfigs={configs}
       adminEmail={sessionUser.email}
     />
   );
 }
 
-function SettingsPageSkeleton() {
+function ConfigsPageSkeleton() {
   return (
     <main
       aria-busy="true"

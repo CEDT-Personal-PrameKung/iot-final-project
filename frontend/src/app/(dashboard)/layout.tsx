@@ -51,7 +51,7 @@ async function SessionNavigation() {
   return (
     <>
       {sessionUser?.role === "admin" && (
-        <NavLink href="/setting">
+        <NavLink href="/configs">
           <Settings aria-hidden="true" data-icon="inline-start" />
           Configs
         </NavLink>

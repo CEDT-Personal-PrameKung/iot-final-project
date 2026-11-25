@@ -14,27 +14,27 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTelemetryTime } from "@/features/parking/formatters";
-import { BaysDevicesSection } from "@/features/settings/bays-devices-section";
-import { LightingSettingsCard } from "@/features/settings/lighting-settings-card";
-import { SensorThresholdsCard } from "@/features/settings/sensor-thresholds-card";
-import { saveAdminSettings } from "@/lib/api/settings";
-import type { ParkingSettingsSnapshot } from "@/types/settings";
+import { BaysDevicesSection } from "@/features/configs/bays-devices-section";
+import { LightingConfigsCard } from "@/features/configs/lighting-configs-card";
+import { SensorThresholdsCard } from "@/features/configs/sensor-thresholds-card";
+import { saveAdminConfigs } from "@/lib/api/configs";
+import type { ParkingConfigsSnapshot } from "@/types/configs";
 
-type SettingsTab = "sensors" | "lighting" | "devices";
+type ConfigsTab = "sensors" | "lighting" | "devices";
 
-interface SettingsDashboardProps {
-  initialSettings: ParkingSettingsSnapshot;
+interface ConfigsDashboardProps {
+  initialConfigs: ParkingConfigsSnapshot;
   adminEmail: string;
 }
 
-export function SettingsDashboard({
-  initialSettings,
+export function ConfigsDashboard({
+  initialConfigs,
   adminEmail,
-}: SettingsDashboardProps) {
+}: ConfigsDashboardProps) {
   const [savedSnapshot, setSavedSnapshot] =
-    useState<ParkingSettingsSnapshot>(initialSettings);
-  const [draft, setDraft] = useState<ParkingSettingsSnapshot>(initialSettings);
-  const [activeTab, setActiveTab] = useState<SettingsTab>("sensors");
+    useState<ParkingConfigsSnapshot>(initialConfigs);
+  const [draft, setDraft] = useState<ParkingConfigsSnapshot>(initialConfigs);
+  const [activeTab, setActiveTab] = useState<ConfigsTab>("sensors");
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -57,11 +57,11 @@ export function SettingsDashboard({
     setIsSaving(true);
     setStatusMessage(null);
     try {
-      const updated = await saveAdminSettings(draft);
+      const updated = await saveAdminConfigs(draft);
       setSavedSnapshot(updated);
       setDraft(updated);
       setStatusMessage(
-        `Settings saved at ${formatTelemetryTime(updated.updatedAt)}`,
+        `Configs saved at ${formatTelemetryTime(updated.updatedAt)}`,
       );
     } finally {
       setIsSaving(false);
@@ -78,7 +78,7 @@ export function SettingsDashboard({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">Configs</h1>
             <Badge variant="outline" className="gap-1.5">
               <span
                 aria-hidden="true"
@@ -174,7 +174,7 @@ export function SettingsDashboard({
         </TabsContent>
 
         <TabsContent value="lighting">
-          <LightingSettingsCard
+          <LightingConfigsCard
             value={draft.lighting}
             onChange={(lighting) => {
               setStatusMessage(null);
