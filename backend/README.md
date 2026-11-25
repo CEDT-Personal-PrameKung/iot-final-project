@@ -16,14 +16,17 @@ uv run fastapi dev src/main.py
 Copy `.env.example` to `.env` and set `DATABASE_URL` to your Neon PostgreSQL
 connection string (including `sslmode=require`). The backend uses SQLAlchemy
 with the psycopg 3 driver and provides request-scoped sessions through
-`src.database.get_db`. The `/health` endpoint runs a database connectivity
-check and returns HTTP 503 if the database is missing or unreachable. The local
-`.env` is ignored by Git.
+`src.database.get_db`. Use `/health/neon` to check Neon or `/health/tiger` to
+check Tiger Cloud. Each endpoint returns HTTP 200 if its database is reachable,
+or HTTP 503 if it is missing or unreachable. The existing `/health` endpoint
+also checks Neon. The local `.env` is ignored by Git.
 
-Set `CORS_ORIGINS` to a comma-separated list of frontend origins allowed to
-call the API from a browser, without trailing slashes (for example,
-`https://your-app.vercel.app`). Set this variable in the backend host's
-environment settings for deployment. Set `BACKEND_API_URL` in the frontend
+In development, an empty `CORS_ORIGINS` allows the Next.js frontend at
+`http://localhost:3000` and `http://127.0.0.1:3000`. An explicit
+`CORS_ORIGINS` overrides these defaults. For deployment, set
+`APP_ENV=production` and set `CORS_ORIGINS` in the backend host's environment
+to a comma-separated list of frontend origins, without trailing slashes
+(for example, `https://your-app.vercel.app`). Set `BACKEND_API_URL` in the frontend
 host's environment settings to the backend's base URL (for example,
 `https://your-api.onrender.com`).
 
@@ -53,6 +56,28 @@ Set `APP_SECRET_KEY` to a unique, random secret (for example, generate one with
 and password and returns a signed bearer token. Tokens expire after
 `ACCESS_TOKEN_EXPIRE_MINUTES` (30 by default). Send the token as
 `Authorization: Bearer <token>` to access `GET /auth/me`.
+
+## Tiger Cloud telemetry
+
+Keep both connection URLs in the backend `.env` or in the backend host's
+environment settings. `DATABASE_URL` connects to Neon for application data.
+`TELEMETRY_DATABASE_URL` connects to a separate Tiger Cloud PostgreSQL service
+with TimescaleDB enabled. Use the connection URL supplied by Tiger Cloud,
+including its port and TLS options. Leaving the telemetry URL blank keeps
+the existing Neon-backed API available.
+
+From the backend directory, apply the Tiger Cloud schema separately:
+
+```sh
+uv run alembic -c telemetry-alembic.ini upgrade head
+```
+
+This creates the `environment_readings` hypertable. It uses the ESP32's
+measurement timestamp and device ID to ignore repeat deliveries of the same
+sample. An MQTT worker can call
+`src.features.sensors.environment.record_environment_reading` with the raw
+payload from `parking/sensor/environment`. The worker and broker subscription
+are still needed for automatic ingestion.
 
 ## Docker
 

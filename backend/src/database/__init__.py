@@ -17,6 +17,10 @@ def get_engine() -> Engine:
     if not database_url:
         raise RuntimeError("DATABASE_URL is not configured")
 
+    return create_postgres_engine(database_url)
+
+
+def create_postgres_engine(database_url: str) -> Engine:
     # SQLAlchemy's psycopg 3 driver is used for PostgreSQL connections.
     if database_url.startswith("postgres://"):
         database_url = "postgresql+psycopg://" + database_url.removeprefix("postgres://")
