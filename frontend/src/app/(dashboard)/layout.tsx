@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { CarFront, LogIn, Settings } from "lucide-react";
 
+import { NavLink } from "@/components/shared/nav-link";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { AccountMenu } from "@/features/auth/account-menu";
@@ -24,14 +25,7 @@ export default function DashboardLayout({
             Smart Parking
           </Link>
           <nav aria-label="Main navigation" className="flex items-center gap-2">
-            <Button
-              nativeButton={false}
-              render={<Link href="/parking" />}
-              variant="ghost"
-            >
-              Parking
-            </Button>
-            <ThemeToggle />
+            <NavLink href="/parking">Parking</NavLink>
             <Suspense
               fallback={
                 <span
@@ -42,6 +36,7 @@ export default function DashboardLayout({
             >
               <SessionNavigation />
             </Suspense>
+            <ThemeToggle />
           </nav>
         </div>
       </header>
@@ -56,14 +51,10 @@ async function SessionNavigation() {
   return (
     <>
       {sessionUser?.role === "admin" && (
-        <Button
-          nativeButton={false}
-          render={<Link href="/setting" />}
-          variant="ghost"
-        >
+        <NavLink href="/setting">
           <Settings aria-hidden="true" data-icon="inline-start" />
           Setting
-        </Button>
+        </NavLink>
       )}
       {sessionUser ? (
         <AccountMenu
