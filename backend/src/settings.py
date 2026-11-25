@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     cors_origins: str = ""
     database_url: str | None = None
+    telemetry_database_url: str | None = None
     app_secret_key: SecretStr | None = None
     access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
 
