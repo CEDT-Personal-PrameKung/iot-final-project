@@ -18,6 +18,7 @@ app = FastAPI(
     title="Smart Parking API",
     description="Backend API for the Smart Parking IoT application.",
     version="0.1.0",
+    servers=[{"url": "/", "description": "Current backend"}],
     docs_url=None,
     redoc_url=None,
 )
