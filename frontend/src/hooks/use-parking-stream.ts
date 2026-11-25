@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  VEHICLE_TYPE_LABEL,
+  computeParkingSummary,
+} from "@/features/parking/formatters";
 import { setParkingLightState } from "@/lib/api/parking";
 import type {
+  OccupancyTrendPoint,
+  ParkingActivityEvent,
   ParkingOverviewSnapshot,
   ParkingSlot,
   ParkingSlotStatus,
@@ -14,6 +20,8 @@ import type {
 
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const BASE_RECONNECT_DELAY_MS = 1_500;
+const MAX_HISTORY_POINTS = 20;
+const MAX_ACTIVITY_EVENTS = 25;
 const SAMPLE_VEHICLE_TYPES: VehicleType[] = ["car", "suv", "motorcycle"];
 
 function buildSimulatedSlot(
@@ -70,6 +78,105 @@ function buildSimulatedSlot(
   };
 }
 
+function buildSlotActivityEvent(
+  previousSlot: ParkingSlot | undefined,
+  nextSlot: ParkingSlot,
+  timestamp: string,
+): ParkingActivityEvent | null {
+  if (previousSlot && previousSlot.status === nextSlot.status) {
+    return null;
+  }
+
+  const id = `act-${nextSlot.id}-${timestamp}`;
+
+  if (nextSlot.status === "occupied") {
+    const vehicleText = nextSlot.cameraDetection
+      ? `${VEHICLE_TYPE_LABEL[nextSlot.cameraDetection.vehicleType]} (${Math.round(nextSlot.cameraDetection.confidence * 100)}%)`
+      : "Vehicle detected";
+    const distanceText =
+      nextSlot.ultrasonicDistanceCm !== null
+        ? ` · Ultrasonic ${nextSlot.ultrasonicDistanceCm} cm`
+        : "";
+    return {
+      id,
+      type: "entry",
+      slotId: nextSlot.id,
+      slotCode: nextSlot.code,
+      summary: `Vehicle entered Bay ${nextSlot.code}`,
+      detail: `${vehicleText}${distanceText}`,
+      timestamp,
+    };
+  }
+
+  if (nextSlot.status === "offline") {
+    return {
+      id,
+      type: "offline",
+      slotId: nextSlot.id,
+      slotCode: nextSlot.code,
+      summary: `Bay ${nextSlot.code} sensor went offline`,
+      detail: `${nextSlot.deviceId} unreachable`,
+      timestamp,
+    };
+  }
+
+  if (previousSlot?.status === "offline") {
+    return {
+      id,
+      type: "online",
+      slotId: nextSlot.id,
+      slotCode: nextSlot.code,
+      summary: `Bay ${nextSlot.code} sensor back online`,
+      detail:
+        nextSlot.ultrasonicDistanceCm !== null
+          ? `Bay clear · Ultrasonic ${nextSlot.ultrasonicDistanceCm} cm`
+          : `${nextSlot.deviceId} reconnected`,
+      timestamp,
+    };
+  }
+
+  return {
+    id,
+    type: "exit",
+    slotId: nextSlot.id,
+    slotCode: nextSlot.code,
+    summary: `Vehicle exited Bay ${nextSlot.code}`,
+    detail:
+      nextSlot.ultrasonicDistanceCm !== null
+        ? `Bay clear · Ultrasonic ${nextSlot.ultrasonicDistanceCm} cm`
+        : "Bay available",
+    timestamp,
+  };
+}
+
+function appendTrendPoint(
+  history: OccupancyTrendPoint[],
+  slots: ParkingSlot[],
+  timestamp: string,
+): OccupancyTrendPoint[] {
+  const metrics = computeParkingSummary(slots);
+  const nextPoint: OccupancyTrendPoint = {
+    timestamp,
+    occupancyPercent: metrics.occupancyPercent,
+    occupied: metrics.occupied,
+    available: metrics.available,
+  };
+  return [...history, nextPoint].slice(-MAX_HISTORY_POINTS);
+}
+
+function prependActivity(
+  events: ParkingActivityEvent[],
+  nextEvent: ParkingActivityEvent | null,
+): ParkingActivityEvent[] {
+  if (!nextEvent) {
+    return events;
+  }
+  if (events.some((item) => item.id === nextEvent.id)) {
+    return events;
+  }
+  return [nextEvent, ...events].slice(0, MAX_ACTIVITY_EVENTS);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -77,7 +184,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseParkingEvent(raw: string): ParkingWebSocketEvent | null {
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed) || typeof parsed.type !== "string" || !("payload" in parsed)) {
+    if (
+      !isRecord(parsed) ||
+      typeof parsed.type !== "string" ||
+      !("payload" in parsed)
+    ) {
       return null;
     }
 
@@ -85,7 +196,8 @@ function parseParkingEvent(raw: string): ParkingWebSocketEvent | null {
       parsed.type === "snapshot" ||
       parsed.type === "slot_status" ||
       parsed.type === "environment_update" ||
-      parsed.type === "lighting_status"
+      parsed.type === "lighting_status" ||
+      parsed.type === "activity_event"
     ) {
       return parsed as ParkingWebSocketEvent;
     }
@@ -104,15 +216,30 @@ function applyParkingEvent(
     case "snapshot":
       return { ...event.payload, dataSource: "live" };
     case "slot_status": {
-      const exists = current.slots.some((slot) => slot.id === event.payload.id);
-      const slots = exists
+      const previousSlot = current.slots.find(
+        (slot) => slot.id === event.payload.id,
+      );
+      const slots = previousSlot
         ? current.slots.map((slot) =>
             slot.id === event.payload.id ? event.payload : slot,
           )
         : [...current.slots, event.payload];
+      const activity = buildSlotActivityEvent(
+        previousSlot,
+        event.payload,
+        event.payload.updatedAt,
+      );
       return {
         ...current,
         slots,
+        occupancyHistory: activity
+          ? appendTrendPoint(
+              current.occupancyHistory,
+              slots,
+              event.payload.updatedAt,
+            )
+          : current.occupancyHistory,
+        recentActivity: prependActivity(current.recentActivity, activity),
         updatedAt: event.payload.updatedAt,
         dataSource: "live",
       };
@@ -131,6 +258,13 @@ function applyParkingEvent(
         updatedAt: event.payload[0]?.updatedAt ?? current.updatedAt,
         dataSource: "live",
       };
+    case "activity_event":
+      return {
+        ...current,
+        recentActivity: prependActivity(current.recentActivity, event.payload),
+        updatedAt: event.payload.timestamp,
+        dataSource: "live",
+      };
   }
 }
 
@@ -143,11 +277,14 @@ export function useParkingStream({
   initialSnapshot,
   wsUrl,
 }: UseParkingStreamOptions) {
-  const [snapshot, setSnapshot] = useState<ParkingOverviewSnapshot>(initialSnapshot);
+  const [snapshot, setSnapshot] =
+    useState<ParkingOverviewSnapshot>(initialSnapshot);
   const [streamStatus, setStreamStatus] = useState<ParkingStreamStatus>(
     wsUrl ? "connecting" : "mock",
   );
-  const [pendingLightIds, setPendingLightIds] = useState<Record<string, boolean>>({});
+  const [pendingLightIds, setPendingLightIds] = useState<
+    Record<string, boolean>
+  >({});
   const reconnectAttemptsRef = useRef(0);
 
   useEffect(() => {
@@ -219,20 +356,36 @@ export function useParkingStream({
     setPendingLightIds((prev) => ({ ...prev, [lightId]: true }));
     try {
       const result = await setParkingLightState(lightId, nextState);
-      setSnapshot((prev) => ({
-        ...prev,
-        updatedAt: result.updatedAt,
-        lights: prev.lights.map((light) =>
-          light.id === result.lightId
-            ? {
-                ...light,
-                isOn: result.isOn,
-                mode: "manual",
-                updatedAt: result.updatedAt,
-              }
-            : light,
-        ),
-      }));
+      setSnapshot((prev) => {
+        const targetLight = prev.lights.find(
+          (light) => light.id === result.lightId,
+        );
+        const lightActivity: ParkingActivityEvent | null = targetLight
+          ? {
+              id: `act-${result.lightId}-${result.updatedAt}`,
+              type: "lighting",
+              summary: `${targetLight.label} turned ${result.isOn ? "on" : "off"}`,
+              detail: `${targetLight.zone} · Manual override`,
+              timestamp: result.updatedAt,
+            }
+          : null;
+
+        return {
+          ...prev,
+          updatedAt: result.updatedAt,
+          recentActivity: prependActivity(prev.recentActivity, lightActivity),
+          lights: prev.lights.map((light) =>
+            light.id === result.lightId
+              ? {
+                  ...light,
+                  isOn: result.isOn,
+                  mode: "manual",
+                  updatedAt: result.updatedAt,
+                }
+              : light,
+          ),
+        };
+      });
     } finally {
       setPendingLightIds((prev) => {
         const next = { ...prev };
@@ -248,15 +401,33 @@ export function useParkingStream({
         return;
       }
       const nowIso = new Date().toISOString();
-      setSnapshot((prev) => ({
-        ...prev,
-        updatedAt: nowIso,
-        slots: prev.slots.map((slot) =>
-          slot.id === slotId
-            ? buildSimulatedSlot(slot, nextStatus, nowIso)
-            : slot,
-        ),
-      }));
+      setSnapshot((prev) => {
+        const previousSlot = prev.slots.find((slot) => slot.id === slotId);
+        if (!previousSlot || previousSlot.status === nextStatus) {
+          return prev;
+        }
+        const updatedSlot = buildSimulatedSlot(previousSlot, nextStatus, nowIso);
+        const slots = prev.slots.map((slot) =>
+          slot.id === slotId ? updatedSlot : slot,
+        );
+        const activity = buildSlotActivityEvent(
+          previousSlot,
+          updatedSlot,
+          nowIso,
+        );
+
+        return {
+          ...prev,
+          updatedAt: nowIso,
+          slots,
+          occupancyHistory: appendTrendPoint(
+            prev.occupancyHistory,
+            slots,
+            nowIso,
+          ),
+          recentActivity: prependActivity(prev.recentActivity, activity),
+        };
+      });
     },
     [wsUrl],
   );
@@ -267,7 +438,9 @@ export function useParkingStream({
     }
     const nowIso = new Date().toISOString();
     setSnapshot((prev) => {
-      const onlineSlots = prev.slots.filter((slot) => slot.status !== "offline");
+      const onlineSlots = prev.slots.filter(
+        (slot) => slot.status !== "offline",
+      );
       if (onlineSlots.length === 0) {
         return prev;
       }
@@ -278,15 +451,18 @@ export function useParkingStream({
       }
       const nextStatus: ParkingSlotStatus =
         target.status === "available" ? "occupied" : "available";
+      const updatedSlot = buildSimulatedSlot(target, nextStatus, nowIso);
+      const slots = prev.slots.map((slot) =>
+        slot.id === target.id ? updatedSlot : slot,
+      );
+      const activity = buildSlotActivityEvent(target, updatedSlot, nowIso);
 
       return {
         ...prev,
         updatedAt: nowIso,
-        slots: prev.slots.map((slot) =>
-          slot.id === target.id
-            ? buildSimulatedSlot(slot, nextStatus, nowIso)
-            : slot,
-        ),
+        slots,
+        occupancyHistory: appendTrendPoint(prev.occupancyHistory, slots, nowIso),
+        recentActivity: prependActivity(prev.recentActivity, activity),
       };
     });
   }, [wsUrl]);

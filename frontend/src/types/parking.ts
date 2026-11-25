@@ -45,10 +45,36 @@ export interface ParkingLight {
 
 export type ParkingDataSource = "mock" | "live";
 
+export interface OccupancyTrendPoint {
+  timestamp: string;
+  occupancyPercent: number;
+  occupied: number;
+  available: number;
+}
+
+export type ParkingActivityType =
+  | "entry"
+  | "exit"
+  | "offline"
+  | "online"
+  | "lighting";
+
+export interface ParkingActivityEvent {
+  id: string;
+  type: ParkingActivityType;
+  slotId?: string;
+  slotCode?: string;
+  summary: string;
+  detail: string;
+  timestamp: string;
+}
+
 export interface ParkingOverviewSnapshot {
   slots: ParkingSlot[];
   environment: EnvironmentTelemetry;
   lights: ParkingLight[];
+  occupancyHistory: OccupancyTrendPoint[];
+  recentActivity: ParkingActivityEvent[];
   updatedAt: string;
   dataSource: ParkingDataSource;
 }
@@ -64,4 +90,5 @@ export type ParkingWebSocketEvent =
   | { type: "snapshot"; payload: ParkingOverviewSnapshot }
   | { type: "slot_status"; payload: ParkingSlot }
   | { type: "environment_update"; payload: EnvironmentTelemetry }
-  | { type: "lighting_status"; payload: ParkingLight[] };
+  | { type: "lighting_status"; payload: ParkingLight[] }
+  | { type: "activity_event"; payload: ParkingActivityEvent };
