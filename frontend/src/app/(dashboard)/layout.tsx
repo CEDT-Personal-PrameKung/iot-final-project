@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { CarFront, LogIn, Settings } from "lucide-react";
+import { CarFront, FileText, LogIn, Settings } from "lucide-react";
 
 import { NavLink } from "@/components/shared/nav-link";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
@@ -26,6 +26,10 @@ export default function DashboardLayout({
           </Link>
           <nav aria-label="Main navigation" className="flex items-center gap-2">
             <NavLink href="/parking">Parking</NavLink>
+            <NavLink href="/reports">
+              <FileText aria-hidden="true" data-icon="inline-start" />
+              Reports
+            </NavLink>
             <Suspense
               fallback={
                 <span

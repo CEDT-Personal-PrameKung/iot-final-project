@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useId, useMemo } from "react";
 import {
   Activity,
@@ -255,9 +256,17 @@ export function AnalyticsActivitySection({
                 Latest vehicle entries, exits, and device events
               </CardDescription>
             </div>
-            <Badge variant="secondary" className="tabular-nums">
-              {visibleActivity.length}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="tabular-nums">
+                {visibleActivity.length}
+              </Badge>
+              <Link
+                href="/reports"
+                className="text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+              >
+                View all
+              </Link>
+            </div>
           </div>
         </CardHeader>
 

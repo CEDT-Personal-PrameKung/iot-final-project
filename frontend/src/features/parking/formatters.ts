@@ -21,6 +21,16 @@ const shortTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Asia/Bangkok",
 });
 
+const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+  timeZone: "Asia/Bangkok",
+});
+
 export function formatTelemetryTime(isoTimestamp: string): string {
   const date = new Date(isoTimestamp);
   if (Number.isNaN(date.getTime())) {
@@ -35,6 +45,14 @@ export function formatShortTime(isoTimestamp: string): string {
     return "—";
   }
   return shortTimeFormatter.format(date);
+}
+
+export function formatTelemetryDateTime(isoTimestamp: string): string {
+  const date = new Date(isoTimestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  return dateTimeFormatter.format(date);
 }
 
 export const SLOT_STATUS_LABEL: Record<ParkingSlotStatus, string> = {
