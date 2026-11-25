@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { login, register } from "@/features/auth/actions";
 import {
@@ -49,6 +49,9 @@ export function AuthForm({ mode }: { mode: AuthFormMode }) {
     action,
     initialAuthFormState,
   );
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
@@ -70,6 +73,8 @@ export function AuthForm({ mode }: { mode: AuthFormMode }) {
                 type="email"
                 autoComplete="email"
                 placeholder="you@example.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
                 required
               />
             </div>
@@ -82,6 +87,8 @@ export function AuthForm({ mode }: { mode: AuthFormMode }) {
                 type="password"
                 autoComplete={isRegister ? "new-password" : "current-password"}
                 placeholder="Enter your password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
                 required
                 minLength={isRegister ? 8 : 1}
                 maxLength={128}
@@ -97,6 +104,8 @@ export function AuthForm({ mode }: { mode: AuthFormMode }) {
                   type="password"
                   autoComplete="new-password"
                   placeholder="Re-enter your password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
                   required
                   minLength={8}
                   maxLength={128}
