@@ -7,7 +7,7 @@ import { ParkingDashboard } from "@/features/parking/parking-dashboard";
 import { getParkingOverview } from "@/lib/api/parking";
 
 export const metadata: Metadata = {
-  title: "Parking | Smart Parking",
+  title: "Parking",
   description:
     "Live parking bay availability, ultrasonic and IR sensors, and lot environment.",
 };

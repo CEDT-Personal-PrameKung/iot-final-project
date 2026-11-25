@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { CarFront, LogIn, Settings } from "lucide-react";
 
+import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { AccountMenu } from "@/features/auth/account-menu";
 import { getSessionUser } from "@/features/auth/session";
@@ -30,6 +31,7 @@ export default function DashboardLayout({
             >
               Parking
             </Button>
+            <ThemeToggle />
             <Suspense
               fallback={
                 <span
