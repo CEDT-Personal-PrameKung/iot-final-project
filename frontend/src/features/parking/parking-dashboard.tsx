@@ -20,6 +20,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnalyticsActivitySection } from "@/features/parking/analytics-activity-section";
 import { EnvironmentLightingSection } from "@/features/parking/environment-lighting-section";
 import {
   STREAM_STATUS_LABEL,
@@ -287,6 +288,12 @@ export function ParkingDashboard({
           </Empty>
         )}
       </section>
+
+      <AnalyticsActivitySection
+        occupancyHistory={snapshot.occupancyHistory}
+        recentActivity={snapshot.recentActivity}
+        onSelectSlotId={setSelectedSlotId}
+      />
 
       <EnvironmentLightingSection
         environment={snapshot.environment}

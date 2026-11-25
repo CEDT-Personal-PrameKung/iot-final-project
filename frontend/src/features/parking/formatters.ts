@@ -14,12 +14,27 @@ const timeFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Asia/Bangkok",
 });
 
+const shortTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: "Asia/Bangkok",
+});
+
 export function formatTelemetryTime(isoTimestamp: string): string {
   const date = new Date(isoTimestamp);
   if (Number.isNaN(date.getTime())) {
     return "—";
   }
   return timeFormatter.format(date);
+}
+
+export function formatShortTime(isoTimestamp: string): string {
+  const date = new Date(isoTimestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  return shortTimeFormatter.format(date);
 }
 
 export const SLOT_STATUS_LABEL: Record<ParkingSlotStatus, string> = {
