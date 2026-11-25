@@ -26,7 +26,11 @@ over TLS. Each client should use separate credentials and topic permissions.
 
 The topics assume one ESP32 controlling the shared set of three lights.
 
-`parking/sensor/environment` carries a JSON sample every second while connected.
+The firmware reads the sensors and updates the lights every 10 seconds by
+default (`SAMPLE_INTERVAL_MS`). Every 10 seconds by default
+(`UPLOAD_INTERVAL_MS`), it publishes the latest readings and lighting state
+while connected. Set the two intervals independently in
+`firmware/yd-esp32-23/src/main.cpp`.
 
 ```json
 {
@@ -41,12 +45,12 @@ The topics assume one ESP32 controlling the shared set of three lights.
 }
 ```
 
-The device ID is derived from the factory MAC. The timestamp is UTC epoch
+The device ID is derived from the factory MAC. The timestamp is the upload time in UTC epoch
 seconds. `light_raw` is an uncalibrated 12-bit ADC reading (0–4095).
 `environment` is null when BME280 readings are unavailable.
 
-`parking/lighting/status` carries the current output state as JSON every
-second. `leds_on` describes all three GPIO outputs, which switch together.
+`parking/lighting/status` carries the latest output state as JSON at each
+upload. `leds_on` describes all three GPIO outputs, which switch together.
 Use the timestamp to detect stale retained status.
 
 ```json
@@ -54,10 +58,10 @@ Use the timestamp to detect stale retained status.
 ```
 
 `parking/control/lighting` accepts the exact plain-text payload `ON` or `OFF`.
-The ESP32 applies it on the next one-second sample. That sample's status
-reports the applied state. Retained commands are ignored on subscription.
+The ESP32 applies it on the next sample and reports the applied state on the
+next upload. Retained commands are ignored on subscription.
 Commands set all three outputs together and can be repeated safely.
 
 The LDR controls the lights from boot until the first valid command. A command
 overrides the LDR until reboot or a later command, including through a Wi-Fi or
-MQTT outage. Telemetry samples taken while disconnected are skipped.
+MQTT outage. Uploads are skipped while disconnected.
