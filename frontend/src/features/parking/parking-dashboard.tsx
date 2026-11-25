@@ -1,14 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  CarFront,
-  LayoutGrid,
-  Map as MapIcon,
-  Radio,
-  RotateCcw,
-  Shuffle,
-} from "lucide-react";
+import { CarFront, Radio, RotateCcw, Shuffle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +24,6 @@ import {
   ParkingLotMap,
   type SlotFilter,
 } from "@/features/parking/parking-lot-map";
-import { ParkingSlotCard } from "@/features/parking/parking-slot-card";
 import { ParkingSlotDetailSheet } from "@/features/parking/parking-slot-detail-sheet";
 import { ParkingSummary } from "@/features/parking/parking-summary";
 import { useParkingStream } from "@/hooks/use-parking-stream";
@@ -40,8 +32,6 @@ import type {
   ParkingOverviewSnapshot,
   ParkingStreamStatus,
 } from "@/types/parking";
-
-type BayViewMode = "map" | "cards";
 
 const streamDotStyles: Record<ParkingStreamStatus, string> = {
   connected: "bg-status-available",
@@ -76,7 +66,6 @@ export function ParkingDashboard({
   const isMockMode = streamStatus === "mock";
 
   const [filter, setFilter] = useState<SlotFilter>("all");
-  const [viewMode, setViewMode] = useState<BayViewMode>("map");
   const [selectedZone, setSelectedZone] = useState<string>("");
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
 
@@ -190,56 +179,34 @@ export function ParkingDashboard({
             </Badge>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Tabs
-              value={filter}
-              onValueChange={(nextValue) => {
-                if (
-                  nextValue === "all" ||
-                  nextValue === "available" ||
-                  nextValue === "occupied" ||
-                  nextValue === "offline"
-                ) {
-                  setFilter(nextValue);
-                }
-              }}
-            >
-              <TabsList>
-                <TabsTrigger value="all">All ({zoneSummary.total})</TabsTrigger>
-                <TabsTrigger value="available">
-                  Available ({zoneSummary.available})
+          <Tabs
+            value={filter}
+            onValueChange={(nextValue) => {
+              if (
+                nextValue === "all" ||
+                nextValue === "available" ||
+                nextValue === "occupied" ||
+                nextValue === "offline"
+              ) {
+                setFilter(nextValue);
+              }
+            }}
+          >
+            <TabsList>
+              <TabsTrigger value="all">All ({zoneSummary.total})</TabsTrigger>
+              <TabsTrigger value="available">
+                Available ({zoneSummary.available})
+              </TabsTrigger>
+              <TabsTrigger value="occupied">
+                Occupied ({zoneSummary.occupied})
+              </TabsTrigger>
+              {zoneSummary.offline > 0 && (
+                <TabsTrigger value="offline">
+                  Offline ({zoneSummary.offline})
                 </TabsTrigger>
-                <TabsTrigger value="occupied">
-                  Occupied ({zoneSummary.occupied})
-                </TabsTrigger>
-                {zoneSummary.offline > 0 && (
-                  <TabsTrigger value="offline">
-                    Offline ({zoneSummary.offline})
-                  </TabsTrigger>
-                )}
-              </TabsList>
-            </Tabs>
-
-            <Tabs
-              value={viewMode}
-              onValueChange={(nextValue) => {
-                if (nextValue === "map" || nextValue === "cards") {
-                  setViewMode(nextValue);
-                }
-              }}
-            >
-              <TabsList aria-label="Parking view mode">
-                <TabsTrigger value="map">
-                  <MapIcon aria-hidden="true" className="size-3.5" />
-                  Map
-                </TabsTrigger>
-                <TabsTrigger value="cards">
-                  <LayoutGrid aria-hidden="true" className="size-3.5" />
-                  Cards
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
+              )}
+            </TabsList>
+          </Tabs>
         </div>
 
         {zoneSlots.length === 0 ? (
@@ -254,7 +221,7 @@ export function ParkingDashboard({
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
-        ) : viewMode === "map" ? (
+        ) : (
           <ParkingLotMap
             slots={zoneSlots}
             zones={zones}
@@ -264,28 +231,6 @@ export function ParkingDashboard({
             selectedSlotId={selectedSlotId}
             onSelectSlot={(picked) => setSelectedSlotId(picked.id)}
           />
-        ) : filteredSlots.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredSlots.map((slot) => (
-              <ParkingSlotCard
-                key={slot.id}
-                slot={slot}
-                onSelect={(picked) => setSelectedSlotId(picked.id)}
-              />
-            ))}
-          </div>
-        ) : (
-          <Empty className="border bg-card">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <CarFront />
-              </EmptyMedia>
-              <EmptyTitle>No parking bays match this filter</EmptyTitle>
-              <EmptyDescription>
-                Try switching to another status tab to view all parking bays.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
         )}
       </section>
 

@@ -21,7 +21,7 @@ import type {
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const BASE_RECONNECT_DELAY_MS = 1_500;
 const MAX_HISTORY_POINTS = 20;
-const MAX_ACTIVITY_EVENTS = 25;
+const MAX_ACTIVITY_EVENTS = 5;
 const SAMPLE_VEHICLE_TYPES: VehicleType[] = ["car", "suv", "motorcycle"];
 
 function buildSimulatedSlot(
@@ -214,7 +214,14 @@ function applyParkingEvent(
 ): ParkingOverviewSnapshot {
   switch (event.type) {
     case "snapshot":
-      return { ...event.payload, dataSource: "live" };
+      return {
+        ...event.payload,
+        recentActivity: event.payload.recentActivity.slice(
+          0,
+          MAX_ACTIVITY_EVENTS,
+        ),
+        dataSource: "live",
+      };
     case "slot_status": {
       const previousSlot = current.slots.find(
         (slot) => slot.id === event.payload.id,
@@ -277,8 +284,13 @@ export function useParkingStream({
   initialSnapshot,
   wsUrl,
 }: UseParkingStreamOptions) {
-  const [snapshot, setSnapshot] =
-    useState<ParkingOverviewSnapshot>(initialSnapshot);
+  const [snapshot, setSnapshot] = useState<ParkingOverviewSnapshot>(() => ({
+    ...initialSnapshot,
+    recentActivity: initialSnapshot.recentActivity.slice(
+      0,
+      MAX_ACTIVITY_EVENTS,
+    ),
+  }));
   const [streamStatus, setStreamStatus] = useState<ParkingStreamStatus>(
     wsUrl ? "connecting" : "mock",
   );
@@ -471,7 +483,13 @@ export function useParkingStream({
     if (wsUrl) {
       return;
     }
-    setSnapshot(initialSnapshot);
+    setSnapshot({
+      ...initialSnapshot,
+      recentActivity: initialSnapshot.recentActivity.slice(
+        0,
+        MAX_ACTIVITY_EVENTS,
+      ),
+    });
   }, [initialSnapshot, wsUrl]);
 
   return {

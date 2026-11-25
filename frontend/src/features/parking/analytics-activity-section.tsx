@@ -44,6 +44,8 @@ import type {
   ParkingActivityType,
 } from "@/types/parking";
 
+const MAX_VISIBLE_ACTIVITY = 5;
+
 const occupancyChartConfig = {
   occupancyPercent: {
     label: "Occupancy",
@@ -113,6 +115,11 @@ export function AnalyticsActivitySection({
   );
 
   const latestPoint = occupancyHistory[occupancyHistory.length - 1];
+
+  const visibleActivity = useMemo(
+    () => recentActivity.slice(0, MAX_VISIBLE_ACTIVITY),
+    [recentActivity],
+  );
 
   return (
     <section
@@ -249,16 +256,16 @@ export function AnalyticsActivitySection({
               </CardDescription>
             </div>
             <Badge variant="secondary" className="tabular-nums">
-              {recentActivity.length}
+              {visibleActivity.length}
             </Badge>
           </div>
         </CardHeader>
 
         <CardContent className="px-0">
-          {recentActivity.length > 0 ? (
+          {visibleActivity.length > 0 ? (
             <ScrollArea className="h-64 px-4">
               <ul className="flex flex-col gap-2 pb-1">
-                {recentActivity.map((event) => {
+                {visibleActivity.map((event) => {
                   const meta = activityMeta[event.type];
                   const Icon = meta.icon;
                   const isClickable = Boolean(event.slotId);
