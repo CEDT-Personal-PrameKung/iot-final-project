@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     emqx_password: SecretStr | None = None
     emqx_client_id: str = "smart-parking-backend"
     emqx_ca_cert_path: str | None = None
+    ws_poll_interval_seconds: float = Field(default=2.0, ge=0.2, le=60.0)
     app_secret_key: SecretStr | None = None
     access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
 

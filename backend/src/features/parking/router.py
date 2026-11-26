@@ -30,6 +30,7 @@ from src.features.parking.service import (
 from src.features.users.security import get_current_user, require_admin
 from src.mqtt.publisher import MqttPublisher, build_publisher
 from src.settings import get_settings
+from src.websocket.router import notify_parking_state_changed
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ def control_parking_lighting(
     publisher: MqttPublisherProtocol = Depends(get_mqtt_publisher),
 ) -> LightingCommandResponse:
     try:
-        return apply_lighting_command(
+        result = apply_lighting_command(
             db,
             command=request.resolved_command(),
             light_id=request.light_id,
@@ -123,6 +124,8 @@ def control_parking_lighting(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to deliver lighting command to MQTT broker",
         ) from error
+    notify_parking_state_changed()
+    return result
 
 
 @reports_router.get(
@@ -172,7 +175,7 @@ def save_admin_configs(
     publisher: MqttPublisherProtocol | None = Depends(get_optional_mqtt_publisher),
 ) -> ParkingConfigsResponse:
     try:
-        return update_admin_configs(
+        result = update_admin_configs(
             db,
             payload,
             actor_email=admin.email,
@@ -184,3 +187,5 @@ def save_admin_configs(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to deliver actuator update to MQTT broker",
         ) from error
+    notify_parking_state_changed()
+    return result

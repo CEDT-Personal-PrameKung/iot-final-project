@@ -13,6 +13,7 @@ from src.features.parking.router import (
 )
 from src.features.users.router import router as users_router
 from src.settings import get_settings
+from src.websocket import parking_broadcaster, router as websocket_router
 
 settings = get_settings()
 cors_origins = [
@@ -26,8 +27,12 @@ if not cors_origins and settings.app_env == "development":
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    yield
-    close_shared_mqtt_publisher()
+    await parking_broadcaster.start()
+    try:
+        yield
+    finally:
+        await parking_broadcaster.stop()
+        close_shared_mqtt_publisher()
 
 
 app = FastAPI(
@@ -53,6 +58,7 @@ app.include_router(users_router)
 app.include_router(parking_router)
 app.include_router(reports_router)
 app.include_router(configs_router)
+app.include_router(websocket_router)
 
 docs = ScalarDoc.from_spec(spec=app.openapi_url, mode="url")
 

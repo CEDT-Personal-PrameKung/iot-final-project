@@ -52,6 +52,7 @@ Main REST endpoints:
 - `POST /parking/lighting` — authenticated endpoint to publish `ON`, `OFF`, or `AUTO` to `parking/control/lighting`.
 - `GET /reports/activity` — filterable parking activity log history.
 - `GET /configs` and `PUT /configs` — admin-only sensor, lighting, barrier, and bay configuration endpoints.
+- `WS /ws/parking` — real-time WebSocket stream pushing an initial `snapshot` followed by incremental `slot_status`, `environment_update`, `lighting_status`, and `activity_event` updates while clients are connected.
 
 Register a guest account with `POST /auth/register` using an email and a
 password of 8–128 characters. Emails are normalized to lowercase, passwords
