@@ -74,10 +74,25 @@ uv run alembic -c telemetry-alembic.ini upgrade head
 
 This creates the `environment_readings` hypertable. It uses the ESP32's
 measurement timestamp and device ID to ignore repeat deliveries of the same
-sample. An MQTT worker can call
-`src.features.sensors.environment.record_environment_reading` with the raw
-payload from `parking/sensor/environment`. The worker and broker subscription
-are still needed for automatic ingestion.
+sample.
+
+## MQTT worker
+
+Configure `EMQX_HOST`, `EMQX_PORT` (default `8883`), `EMQX_USERNAME`, and
+`EMQX_PASSWORD` in `backend/.env`, then start the standalone MQTT subscriber
+worker from the `backend` directory:
+
+```sh
+uv run python -m src.mqtt.worker
+```
+
+The worker connects directly to EMQX Cloud over TLS 1.2+ with bounded
+reconnect backoff, subscribes to `parking/status`, `parking/vision/detection`,
+`parking/sensor/entrance`, `parking/lighting/status`, and
+`parking/sensor/environment`, and persists incoming environment readings to
+Tiger Cloud when `TELEMETRY_DATABASE_URL` is configured. Authorized lighting
+commands (`ON`/`OFF`/`AUTO`) can be published to `parking/control/lighting` through
+`src.mqtt.publisher.MqttPublisher`.
 
 ## Docker
 
