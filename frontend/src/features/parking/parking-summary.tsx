@@ -1,4 +1,4 @@
-import { CarFront, CircleCheck, Gauge, Thermometer } from "lucide-react";
+import { Droplets, Gauge, Sun, Thermometer } from "lucide-react";
 
 import {
   Card,
@@ -6,95 +6,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import type { ParkingSummaryMetrics } from "@/features/parking/formatters";
+import { LIGHT_CONDITION_LABEL } from "@/features/parking/formatters";
 import type { EnvironmentTelemetry } from "@/types/parking";
 
 interface ParkingSummaryProps {
-  summary: ParkingSummaryMetrics;
   environment: EnvironmentTelemetry;
 }
 
-export function ParkingSummary({ summary, environment }: ParkingSummaryProps) {
+export function ParkingSummary({ environment }: ParkingSummaryProps) {
   return (
-    <section aria-label="Parking overview" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <section
+      aria-label="Environment telemetry"
+      className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+    >
       <Card size="sm">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
           <CardTitle className="text-xs font-medium text-muted-foreground">
-            Available Bays
-          </CardTitle>
-          <CircleCheck
-            aria-hidden="true"
-            className="size-4 text-status-available"
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-1">
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-semibold tracking-tight tabular-nums">
-              {summary.available}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              of {summary.total} bays
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Open and ready for parking
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card size="sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-          <CardTitle className="text-xs font-medium text-muted-foreground">
-            Occupied Bays
-          </CardTitle>
-          <CarFront
-            aria-hidden="true"
-            className="size-4 text-status-occupied"
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-1">
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-semibold tracking-tight tabular-nums">
-              {summary.occupied}
-            </span>
-            {summary.offline > 0 && (
-              <span className="text-xs text-muted-foreground">
-                · {summary.offline} offline
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Vehicles currently detected
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card size="sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-          <CardTitle className="text-xs font-medium text-muted-foreground">
-            Occupancy Rate
-          </CardTitle>
-          <Gauge aria-hidden="true" className="size-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-semibold tracking-tight tabular-nums">
-              {summary.occupancyPercent}%
-            </span>
-            <span className="text-xs text-muted-foreground">active bays</span>
-          </div>
-          <Progress
-            aria-label="Parking occupancy rate"
-            value={summary.occupancyPercent}
-          />
-        </CardContent>
-      </Card>
-
-      <Card size="sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-          <CardTitle className="text-xs font-medium text-muted-foreground">
-            Lot Environment
+            Temperature
           </CardTitle>
           <Thermometer
             aria-hidden="true"
@@ -102,17 +30,63 @@ export function ParkingSummary({ summary, environment }: ParkingSummaryProps) {
           />
         </CardHeader>
         <CardContent className="flex flex-col gap-1">
+          <span className="text-2xl font-semibold tracking-tight tabular-nums">
+            {environment.temperatureC.toFixed(1)}°C
+          </span>
+          <p className="text-xs text-muted-foreground">BME280 sensor</p>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+          <CardTitle className="text-xs font-medium text-muted-foreground">
+            Humidity
+          </CardTitle>
+          <Droplets
+            aria-hidden="true"
+            className="size-4 text-muted-foreground"
+          />
+        </CardHeader>
+        <CardContent className="flex flex-col gap-1">
+          <span className="text-2xl font-semibold tracking-tight tabular-nums">
+            {environment.humidityPercent}%
+          </span>
+          <p className="text-xs text-muted-foreground">Relative humidity</p>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+          <CardTitle className="text-xs font-medium text-muted-foreground">
+            Pressure
+          </CardTitle>
+          <Gauge aria-hidden="true" className="size-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent className="flex flex-col gap-1">
+          <span className="text-2xl font-semibold tracking-tight tabular-nums">
+            {environment.pressureHpa.toFixed(1)} hPa
+          </span>
+          <p className="text-xs text-muted-foreground">Atmospheric</p>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+          <CardTitle className="text-xs font-medium text-muted-foreground">
+            Ambient Light
+          </CardTitle>
+          <Sun aria-hidden="true" className="size-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent className="flex flex-col gap-1">
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-semibold tracking-tight tabular-nums">
-              {environment.temperatureC.toFixed(1)}°C
+            <span className="text-2xl font-semibold tracking-tight tabular-nums">
+              {environment.lightLux} lx
             </span>
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {environment.humidityPercent}% RH
+            <span className="text-xs text-muted-foreground">
+              {LIGHT_CONDITION_LABEL[environment.lightCondition]}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground tabular-nums">
-            Ambient light {environment.lightLux} lx
-          </p>
+          <p className="text-xs text-muted-foreground">LDR sensor</p>
         </CardContent>
       </Card>
     </section>

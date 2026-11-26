@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { getSessionUser } from "@/features/auth/session";
 import { ParkingDashboard } from "@/features/parking/parking-dashboard";
 import { getParkingOverview } from "@/lib/api/parking";
 
@@ -21,17 +20,8 @@ export default function ParkingPage() {
 }
 
 async function ParkingPageContent() {
-  const [snapshot, sessionUser] = await Promise.all([
-    getParkingOverview(),
-    getSessionUser(),
-  ]);
-
-  return (
-    <ParkingDashboard
-      initialSnapshot={snapshot}
-      isAdmin={sessionUser?.role === "admin"}
-    />
-  );
+  const snapshot = await getParkingOverview();
+  return <ParkingDashboard initialSnapshot={snapshot} />;
 }
 
 function ParkingDashboardSkeleton() {
@@ -45,11 +35,11 @@ function ParkingDashboardSkeleton() {
         <Skeleton className="h-4 w-72" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Skeleton className="h-28 rounded-xl" />
-        <Skeleton className="h-28 rounded-xl" />
-        <Skeleton className="h-28 rounded-xl" />
-        <Skeleton className="h-28 rounded-xl" />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
       </div>
 
       <Skeleton className="h-96 rounded-2xl" />

@@ -13,8 +13,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AnalyticsActivitySection } from "@/features/parking/analytics-activity-section";
-import { EnvironmentLightingSection } from "@/features/parking/environment-lighting-section";
 import {
   STREAM_STATUS_LABEL,
   computeParkingSummary,
@@ -87,19 +85,13 @@ function useCurrentTime(): number | null {
 
 interface ParkingDashboardProps {
   initialSnapshot: ParkingOverviewSnapshot;
-  isAdmin: boolean;
 }
 
-export function ParkingDashboard({
-  initialSnapshot,
-  isAdmin,
-}: ParkingDashboardProps) {
+export function ParkingDashboard({ initialSnapshot }: ParkingDashboardProps) {
   const wsUrl = process.env.NEXT_PUBLIC_PARKING_WS_URL;
   const {
     snapshot,
     streamStatus,
-    pendingLightIds,
-    toggleLight,
     simulateSlotStatus,
     resetMockSnapshot,
   } = useParkingStream({
@@ -167,7 +159,7 @@ export function ParkingDashboard({
         </div>
       </div>
 
-      <ParkingSummary summary={summary} environment={snapshot.environment} />
+      <ParkingSummary environment={snapshot.environment} />
 
       <section aria-label="Parking map" className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -224,23 +216,6 @@ export function ParkingDashboard({
           />
         )}
       </section>
-
-      <AnalyticsActivitySection
-        occupancyHistory={snapshot.occupancyHistory}
-        recentActivity={snapshot.recentActivity}
-        isAdmin={isAdmin}
-        onSelectSlotId={setSelectedSlotId}
-      />
-
-      <EnvironmentLightingSection
-        environment={snapshot.environment}
-        lights={snapshot.lights}
-        isAdmin={isAdmin}
-        pendingLightIds={pendingLightIds}
-        onToggleLight={(lightId, nextState) => {
-          void toggleLight(lightId, nextState);
-        }}
-      />
 
       <ParkingSlotDetailSheet
         slot={selectedSlot}
