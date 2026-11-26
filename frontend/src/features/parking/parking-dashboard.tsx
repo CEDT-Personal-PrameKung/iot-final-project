@@ -66,49 +66,12 @@ export function ParkingDashboard({
   const isMockMode = streamStatus === "mock";
 
   const [filter, setFilter] = useState<SlotFilter>("all");
-  const [selectedZone, setSelectedZone] = useState<string>("");
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
 
   const summary = useMemo(
     () => computeParkingSummary(snapshot.slots),
     [snapshot.slots],
   );
-
-  const zones = useMemo(() => {
-    const uniqueZones: string[] = [];
-    for (const slot of snapshot.slots) {
-      if (!uniqueZones.includes(slot.zone)) {
-        uniqueZones.push(slot.zone);
-      }
-    }
-    return uniqueZones;
-  }, [snapshot.slots]);
-
-  const activeZone = useMemo(() => {
-    if (selectedZone && zones.includes(selectedZone)) {
-      return selectedZone;
-    }
-    return zones[0] ?? "";
-  }, [selectedZone, zones]);
-
-  const zoneSlots = useMemo(() => {
-    if (!activeZone) {
-      return snapshot.slots;
-    }
-    return snapshot.slots.filter((slot) => slot.zone === activeZone);
-  }, [activeZone, snapshot.slots]);
-
-  const zoneSummary = useMemo(
-    () => computeParkingSummary(zoneSlots),
-    [zoneSlots],
-  );
-
-  const filteredSlots = useMemo(() => {
-    if (filter === "all") {
-      return zoneSlots;
-    }
-    return zoneSlots.filter((slot) => slot.status === filter);
-  }, [filter, zoneSlots]);
 
   const selectedSlot = useMemo(
     () => snapshot.slots.find((slot) => slot.id === selectedSlotId) ?? null,
@@ -170,14 +133,7 @@ export function ParkingDashboard({
 
       <section aria-label="Parking map" className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold tracking-tight">
-              Parking Map
-            </h2>
-            <Badge variant="secondary" className="tabular-nums">
-              {filteredSlots.length}
-            </Badge>
-          </div>
+          <h2 className="text-lg font-semibold tracking-tight">Parking Map</h2>
 
           <Tabs
             value={filter}
@@ -193,23 +149,23 @@ export function ParkingDashboard({
             }}
           >
             <TabsList>
-              <TabsTrigger value="all">All ({zoneSummary.total})</TabsTrigger>
+              <TabsTrigger value="all">All ({summary.total})</TabsTrigger>
               <TabsTrigger value="available">
-                Available ({zoneSummary.available})
+                Available ({summary.available})
               </TabsTrigger>
               <TabsTrigger value="occupied">
-                Occupied ({zoneSummary.occupied})
+                Occupied ({summary.occupied})
               </TabsTrigger>
-              {zoneSummary.offline > 0 && (
+              {summary.offline > 0 && (
                 <TabsTrigger value="offline">
-                  Offline ({zoneSummary.offline})
+                  Offline ({summary.offline})
                 </TabsTrigger>
               )}
             </TabsList>
           </Tabs>
         </div>
 
-        {zoneSlots.length === 0 ? (
+        {snapshot.slots.length === 0 ? (
           <Empty className="border bg-card">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -223,10 +179,7 @@ export function ParkingDashboard({
           </Empty>
         ) : (
           <ParkingLotMap
-            slots={zoneSlots}
-            zones={zones}
-            activeZone={activeZone}
-            onZoneChange={setSelectedZone}
+            slots={snapshot.slots}
             statusFilter={filter}
             selectedSlotId={selectedSlotId}
             onSelectSlot={(picked) => setSelectedSlotId(picked.id)}

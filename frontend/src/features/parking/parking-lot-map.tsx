@@ -21,9 +21,6 @@ export type SlotFilter = "all" | ParkingSlotStatus;
 
 interface ParkingLotMapProps {
   slots: ParkingSlot[];
-  zones: string[];
-  activeZone: string;
-  onZoneChange: (zone: string) => void;
   statusFilter: SlotFilter;
   selectedSlotId: string | null;
   onSelectSlot: (slot: ParkingSlot) => void;
@@ -60,9 +57,6 @@ function groupHeadToHeadPairs(rows: ParkingSlot[][]): ParkingSlot[][][] {
 
 export function ParkingLotMap({
   slots,
-  zones,
-  activeZone,
-  onZoneChange,
   statusFilter,
   selectedSlotId,
   onSelectSlot,
@@ -76,35 +70,6 @@ export function ParkingLotMap({
 
   return (
     <div className="flex flex-col gap-4 rounded-2xl border bg-muted/40 p-4 sm:p-5">
-      {zones.length > 0 && (
-        <div
-          role="tablist"
-          aria-label="Parking zones"
-          className="flex flex-wrap items-center gap-2.5"
-        >
-          {zones.map((zone) => {
-            const isActive = zone === activeZone;
-            return (
-              <button
-                key={zone}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => onZoneChange(zone)}
-                className={cn(
-                  "min-w-28 rounded-full px-5 py-2 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  isActive
-                    ? "bg-status-warning text-status-warning-foreground shadow-xs"
-                    : "bg-card text-foreground ring-1 ring-border hover:bg-accent",
-                )}
-              >
-                {zone}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       <TooltipProvider delay={150}>
         <div className="overflow-x-auto rounded-2xl border bg-card p-4 shadow-xs sm:p-6">
           <div
