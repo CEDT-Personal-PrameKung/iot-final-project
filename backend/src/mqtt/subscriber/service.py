@@ -11,14 +11,22 @@ from typing import Any
 import paho.mqtt.client as mqtt
 from pydantic import ValidationError
 
+from src.features.parking.telemetry_state import ParkingTelemetryStore
 from src.features.sensors.environment import record_environment_reading
 from src.mqtt.client import MqttConfig, create_mqtt_client, load_mqtt_config
-from src.mqtt.topics import SUBSCRIBED_TOPICS, TOPIC_ENVIRONMENT_SENSOR
+from src.mqtt.topics import (
+    SUBSCRIBED_TOPICS,
+    TOPIC_ENTRANCE_SENSOR,
+    TOPIC_ENVIRONMENT_SENSOR,
+    TOPIC_LIGHTING_STATUS,
+    TOPIC_PARKING_STATUS,
+    TOPIC_VISION_DETECTION,
+)
 from src.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
-MessageHandler = Callable[[str, bytes], None]
+MessageHandler = Callable[[str, bytes], Any]
 ClientFactory = Callable[..., mqtt.Client]
 
 
@@ -180,10 +188,15 @@ class MqttSubscriber:
                 signal.signal(signal.SIGTERM, previous_sigterm)
 
 
-def build_default_subscriber(settings: Settings | None = None) -> MqttSubscriber:
-    """Create the default backend subscriber wired to existing telemetry handlers."""
+def build_default_subscriber(
+    settings: Settings | None = None,
+    *,
+    store: ParkingTelemetryStore | None = None,
+) -> MqttSubscriber:
+    """Create the default backend subscriber wired to all parking and sensor handlers."""
     resolved = settings or get_settings()
     config = load_mqtt_config(resolved)
+    telemetry_store = store or ParkingTelemetryStore()
     subscriber = MqttSubscriber(config=config, subscriptions=SUBSCRIBED_TOPICS)
 
     telemetry_warned = False
@@ -200,5 +213,17 @@ def build_default_subscriber(settings: Settings | None = None) -> MqttSubscriber
             return
         record_environment_reading(payload)
 
+    subscriber.register_handler(
+        TOPIC_PARKING_STATUS, telemetry_store.handle_parking_status
+    )
+    subscriber.register_handler(
+        TOPIC_VISION_DETECTION, telemetry_store.handle_vision_detection
+    )
+    subscriber.register_handler(
+        TOPIC_ENTRANCE_SENSOR, telemetry_store.handle_entrance_sensor
+    )
+    subscriber.register_handler(
+        TOPIC_LIGHTING_STATUS, telemetry_store.handle_lighting_status
+    )
     subscriber.register_handler(TOPIC_ENVIRONMENT_SENSOR, handle_environment_reading)
     return subscriber
