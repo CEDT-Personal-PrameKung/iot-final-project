@@ -10,3 +10,12 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
+
+  mqtt-worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend.Dockerfile
+    env_file:
+      - backend/.env
+    command: ["python", "-m", "src.mqtt.worker"]
+    restart: unless-stopped

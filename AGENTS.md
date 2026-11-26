@@ -86,22 +86,19 @@ flowchart TB
 - Do not send full camera images or Base64-encoded image payloads through MQTT. Publish detection metadata and, when needed, an object-storage reference instead. Object storage provider remains a deployment decision.
 - Use stable device identifiers and a documented topic convention. Restrict publish/subscribe permissions with broker credentials and topic ACLs.
 
-### Initial MQTT Topic Convention
+### Active MQTT Topic Convention
 
-The following topics are the initial project convention. Update this section if the implementation adopts a versioned or device-scoped topic scheme.
+The following topics are the active project convention (see [`docs/mqtt/topics.md`](docs/mqtt/topics.md) for full payload schemas, QoS, and retain settings).
 
-| Topic | Publisher | Subscribers | Purpose |
-|---|---|---|---|
-| `parking/sensor/ultrasonic` | ESP32-S3 | Raspberry Pi 5, backend | Distance readings |
-| `parking/sensor/ir` | ESP32-S3 | Raspberry Pi 5, backend | Obstacle detection |
-| `parking/sensor/environment` | YD-ESP32-23 | Raspberry Pi 5 | [LDR and BME280 readings](docs/architecture/esp32-telemetry.md) |
-| `parking/lighting/status` | YD-ESP32-23 | Raspberry Pi 5 | State of the three parking lights |
-| `parking/control/lighting` | Raspberry Pi 5 | YD-ESP32-23 | Turn the three parking lights on or off |
-| `parking/gateway/environment` | Raspberry Pi 5 | Backend | BME280 readings |
-| `parking/gateway/light` | Raspberry Pi 5 | Backend | LDR readings |
-| `parking/gateway/camera` | Raspberry Pi 5 | Backend | Vehicle detection metadata |
-| `parking/slot/status` | Raspberry Pi 5 or backend, as assigned by domain ownership | Backend, frontend via backend | Parking slot state |
-| `parking/actuator/command` | Backend | ESP32-S3 and/or Raspberry Pi 5 | Authorized actuator commands |
+| Topic | Publisher | Subscribers | QoS / Retain | Purpose |
+|---|---|---|---|---|
+| `parking/status` | Raspberry Pi 5 | Backend | QoS 0 / Retained | Master snapshot: bay states (`P1`–`P6`), camera, counts, barrier gate, GPIO pins, IR sensors |
+| `parking/vision/detection` | Raspberry Pi 5 | Backend | QoS 0 / No | YOLO inference FPS, detection metadata, and bay occupancy/pending states |
+| `parking/sensor/entrance` | Raspberry Pi 5 | Backend | QoS 0 / No | Entrance/exit IR sensor readings and ultrasonic obstacle distance |
+| `parking/sensor/environment` | YD-ESP32-23 | Raspberry Pi 5, backend | QoS 0 / No | [LDR and BME280 readings](docs/architecture/esp32-telemetry.md) |
+| `parking/lighting/status` | YD-ESP32-23 | Raspberry Pi 5, backend | QoS 0 / Retained | Current state (`leds_on`) of the three parking lights |
+| `parking/control/lighting` | Backend, Raspberry Pi 5 | YD-ESP32-23 | QoS 1 / No | Lighting commands (`ON`, `OFF`, or `AUTO`) |
+| `parking/actuator/command` | Backend | ESP32-S3 and/or Raspberry Pi 5 | QoS 1 / No | Reserved for future authorized actuator commands (e.g. barrier gate) |
 
 Define payload schemas, timestamps, units, device IDs, QoS, retain behavior, and command acknowledgement behavior in `docs/architecture/` before relying on them in production.
 

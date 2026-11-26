@@ -90,12 +90,13 @@ MQTT is the only device-to-cloud transport. The frontend never talks to the brok
 
 Implemented:
 
-- **Backend** — user registration/login (JWT auth), roles, health check with DB connectivity probe, Alembic migrations. MQTT worker, parking/sensor/analytics features are scaffolded but empty.
-- **Frontend** — login/register pages wired to the backend, dashboard layout, parking and settings pages, account menu.
+- **Backend** — JWT auth and roles, health probes (`/health`, `/health/neon`, `/health/tiger`), EMQX Cloud TLS MQTT subscriber/publisher worker (`src.mqtt.worker`), Pydantic payload validation and deduplication for all 5 telemetry topics, Neon PostgreSQL + Tiger Cloud (TimescaleDB) Alembic migrations and persistence, REST APIs (`/parking/overview`, `/parking/lighting`, `/reports/activity`, `/configs`), and real-time WebSocket streaming (`WS /ws/parking`).
+- **Frontend** — login/register pages, live `/parking` map, `/reports` activity logs, and admin `/configs` dashboard connected to backend REST APIs and WebSocket stream (with offline mock fallback).
+- **ESP32 firmware** — YD-ESP32-23 telemetry & lighting firmware (`firmware/yd-esp32-23/`).
 - **Models** — complete training pipeline: dataset download from Roboflow, CUDA training on YOLOv11, evaluation, prediction. Latest model reaches ~0.97 mAP50-95 on the held-out test split.
-- **Infrastructure** — backend Dockerfile and docker-compose service.
+- **Infrastructure** — backend Dockerfile and `docker-compose.yml` for both the FastAPI API and standalone MQTT worker.
 
-Planned: ESP32 firmware, gateway application, MQTT integration (device credentials, ACLs, payload schemas), parking business logic, real-time WebSocket updates, analytics.
+Planned / In Progress: gateway repository sync under `gateway/`, optional barrier actuator MQTT command handling, and production deployment configuration.
 
 ## Getting Started
 
@@ -103,23 +104,32 @@ Planned: ESP32 firmware, gateway application, MQTT integration (device credentia
 
 ```sh
 cd backend
-cp .env.example .env   # set DATABASE_URL to your Neon connection string
+cp .env.example .env   # set DATABASE_URL, TELEMETRY_DATABASE_URL, EMQX_*, APP_SECRET_KEY
 uv sync
+uv run alembic upgrade head
+uv run alembic -c telemetry-alembic.ini upgrade head
 uv run fastapi dev src/main.py
 ```
 
-Dev server runs on port 8000; `/health` checks database connectivity.
+Run the standalone MQTT subscriber worker in a second terminal:
+
+```sh
+cd backend
+uv run python -m src.mqtt.worker
+```
+
+Dev API runs on port `8000` (`http://127.0.0.1:8000/docs`, `ws://127.0.0.1:8000/ws/parking`).
 
 ### Frontend
 
 ```sh
 cd frontend
 npm install
-cp .env.example .env   # point it at the backend URL
+cp .env.example .env   # set BACKEND_API_URL and NEXT_PUBLIC_PARKING_WS_URL
 npm run dev
 ```
 
-Dev server runs on port 3000.
+Dev server runs on port `3000`.
 
 ### Model Training
 
@@ -139,13 +149,15 @@ python predict.py --source path/to/photo.jpg
 ### Full Stack via Docker
 
 ```sh
-cp backend/.env.example backend/.env   # configure DATABASE_URL first
-docker compose up --build backend
+cp backend/.env.example backend/.env   # configure Neon, Tiger Cloud, EMQX, and APP_SECRET_KEY
+docker compose up --build
 ```
 
 ## Documentation
 
 - [AGENTS.md](AGENTS.md) — confirmed architecture decisions, coding guidelines, MQTT topic convention.
-- [backend/README.md](backend/README.md) — backend development and deployment notes.
+- [docs/mqtt/topics.md](docs/mqtt/topics.md) — active MQTT topics, payload schemas, QoS, and retain behavior.
+- [docs/architecture/esp32-telemetry.md](docs/architecture/esp32-telemetry.md) — YD-ESP32-23 environmental telemetry and lighting setup.
+- [backend/README.md](backend/README.md) — backend development, migrations, MQTT worker, and deployment notes.
 - [frontend/README.md](frontend/README.md) — frontend development notes.
 - [models/README.md](models/README.md) — dataset, CUDA setup, training, evaluation, and prediction guide.
