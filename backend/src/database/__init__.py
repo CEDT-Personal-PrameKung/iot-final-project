@@ -7,7 +7,15 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.database.base import Base
-from src.database.models import User, UserRole
+from src.database.models import (
+    GatewayStatusRecord,
+    LightingStatusRecord,
+    ParkingActivityEventRecord,
+    ParkingSlotRecord,
+    SystemConfigRecord,
+    User,
+    UserRole,
+)
 from src.settings import get_settings
 
 
@@ -48,4 +56,17 @@ def get_db() -> Generator[Session, None, None]:
         yield session
 
 
-__all__ = ["Base", "Session", "User", "UserRole", "engine", "get_db"]
+__all__ = [
+    "Base",
+    "GatewayStatusRecord",
+    "LightingStatusRecord",
+    "ParkingActivityEventRecord",
+    "ParkingSlotRecord",
+    "Session",
+    "SessionLocal",
+    "SystemConfigRecord",
+    "User",
+    "UserRole",
+    "engine",
+    "get_db",
+]

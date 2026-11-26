@@ -11,6 +11,9 @@ from typing import Any
 import paho.mqtt.client as mqtt
 from pydantic import ValidationError
 
+from src.database import SessionLocal, engine as neon_engine
+from src.database.telemetry import get_telemetry_engine
+from src.features.parking.repository import ParkingPersistenceService
 from src.features.parking.telemetry_state import ParkingTelemetryStore
 from src.features.sensors.environment import record_environment_reading
 from src.mqtt.client import MqttConfig, create_mqtt_client, load_mqtt_config
@@ -192,11 +195,27 @@ def build_default_subscriber(
     settings: Settings | None = None,
     *,
     store: ParkingTelemetryStore | None = None,
+    persistence: ParkingPersistenceService | None = None,
 ) -> MqttSubscriber:
     """Create the default backend subscriber wired to all parking and sensor handlers."""
     resolved = settings or get_settings()
     config = load_mqtt_config(resolved)
-    telemetry_store = store or ParkingTelemetryStore()
+    if store is not None:
+        telemetry_store = store
+    else:
+        resolved_persistence = persistence or ParkingPersistenceService(
+            session_factory=(
+                SessionLocal
+                if resolved.database_url and neon_engine is not None
+                else None
+            ),
+            telemetry_engine_getter=(
+                get_telemetry_engine if resolved.telemetry_database_url else None
+            ),
+        )
+        telemetry_store = ParkingTelemetryStore(
+            on_update=resolved_persistence.handle_telemetry_update
+        )
     subscriber = MqttSubscriber(config=config, subscriptions=SUBSCRIBED_TOPICS)
 
     telemetry_warned = False

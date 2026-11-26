@@ -1,5 +1,6 @@
 """Parking availability, telemetry schemas, and state handling."""
 
+from src.features.parking.repository import ParkingPersistenceService
 from src.features.parking.schemas import (
     CameraStatusPayload,
     GpioLevel,
@@ -23,6 +24,7 @@ __all__ = [
     "GpioPinPayload",
     "IrSensorStatusPayload",
     "LightingStatusPayload",
+    "ParkingPersistenceService",
     "ParkingSpotPayload",
     "ParkingStatusPayload",
     "ParkingTelemetrySnapshot",

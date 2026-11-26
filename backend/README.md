@@ -72,9 +72,9 @@ From the backend directory, apply the Tiger Cloud schema separately:
 uv run alembic -c telemetry-alembic.ini upgrade head
 ```
 
-This creates the `environment_readings` hypertable. It uses the ESP32's
-measurement timestamp and device ID to ignore repeat deliveries of the same
-sample.
+This creates the `environment_readings` and `occupancy_history` hypertables.
+Both use device/gateway identifiers and timestamps to ignore repeat deliveries
+of the same sample.
 
 ## MQTT worker
 

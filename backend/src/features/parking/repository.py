@@ -1,0 +1,462 @@
+"""Database persistence for parking state (Neon) and occupancy history (Tiger Cloud)."""
+
+from __future__ import annotations
+
+import logging
+import threading
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
+
+from src.database.models.parking import (
+    GatewayStatusRecord,
+    LightingStatusRecord,
+    ParkingActivityEventRecord,
+    ParkingSlotRecord,
+)
+from src.features.parking.schemas import (
+    LightingStatusPayload,
+    ParkingStatusPayload,
+    VisionDetectionPayload,
+)
+from src.features.sensors.entrance import EntranceSensorPayload
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_GATEWAY_ID = "rpi5-gateway-01"
+DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 60.0
+
+SessionFactory = Callable[[], Session]
+EngineGetter = Callable[[], Engine]
+
+
+def _ensure_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _normalize_timestamp(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return _ensure_utc(value)
+
+
+def _should_write_heartbeat(
+    last_written_at: datetime | None,
+    current_timestamp: datetime,
+    interval_seconds: float,
+) -> bool:
+    if last_written_at is None:
+        return True
+    return (_ensure_utc(current_timestamp) - _ensure_utc(last_written_at)).total_seconds() >= interval_seconds
+
+
+def _extract_ir_pair(
+    payload: ParkingStatusPayload,
+) -> tuple[tuple[bool, int, datetime | None] | None, tuple[bool, int, datetime | None] | None]:
+    entrance = None
+    exit_sensor = None
+    for sensor in payload.ir_sensors:
+        name = sensor.name.strip().lower()
+        data = (sensor.active, sensor.event_count, sensor.last_trigger)
+        if name == "entrance":
+            entrance = data
+        elif name == "exit":
+            exit_sensor = data
+    return entrance, exit_sensor
+
+
+class ParkingPersistenceService:
+    """Persists validated MQTT telemetry into Neon PostgreSQL and Tiger Cloud."""
+
+    def __init__(
+        self,
+        *,
+        session_factory: SessionFactory | None = None,
+        telemetry_engine_getter: EngineGetter | None = None,
+        gateway_id: str = DEFAULT_GATEWAY_ID,
+        heartbeat_interval_seconds: float = DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
+    ) -> None:
+        self._session_factory = session_factory
+        self._telemetry_engine_getter = telemetry_engine_getter
+        self._gateway_id = gateway_id
+        self._heartbeat_interval_seconds = heartbeat_interval_seconds
+        self._lock = threading.Lock()
+        self._last_neon_status_at: datetime | None = None
+        self._last_neon_vision_at: datetime | None = None
+        self._last_neon_entrance_at: datetime | None = None
+        self._last_occupancy_sample_at: datetime | None = None
+        self._last_occupancy_signature: tuple[int, int, int, str] | None = None
+        self._neon_warned = False
+        self._tiger_warned = False
+
+    def handle_telemetry_update(self, kind: str, payload: Any) -> None:
+        """Callback compatible with `ParkingTelemetryStore(on_update=...)`."""
+        if kind == "parking_status" and isinstance(payload, ParkingStatusPayload):
+            self.persist_parking_status(payload)
+        elif kind == "vision_detection" and isinstance(payload, VisionDetectionPayload):
+            self.persist_vision_detection(payload)
+        elif kind == "entrance_sensor" and isinstance(payload, EntranceSensorPayload):
+            self.persist_entrance_sensor(payload)
+        elif kind == "lighting_status" and isinstance(payload, LightingStatusPayload):
+            self.persist_lighting_status(payload)
+
+    def persist_parking_status(self, payload: ParkingStatusPayload) -> None:
+        """Persist slot states, gateway snapshot, activity events, and occupancy trend."""
+        with self._lock:
+            self._persist_parking_status_neon(payload)
+            self._persist_occupancy_history_tiger(payload)
+
+    def _persist_parking_status_neon(self, payload: ParkingStatusPayload) -> None:
+        if self._session_factory is None:
+            self._warn_neon_missing()
+            return
+
+        gpio_by_spot = {pin.spot: pin for pin in payload.gpio_pins}
+        entrance_ir, exit_ir = _extract_ir_pair(payload)
+
+        with self._session_factory() as session:
+            with session.begin():
+                gateway = session.get(GatewayStatusRecord, self._gateway_id)
+                gateway_is_new = gateway is None
+                previous_barrier = gateway.barrier_state if gateway is not None else None
+
+                existing_slots = {
+                    slot.id: slot
+                    for slot in session.query(ParkingSlotRecord)
+                    .filter(ParkingSlotRecord.id.in_([s.id for s in payload.parking_spots]))
+                    .all()
+                }
+
+                meaningful_change = gateway_is_new
+                if gateway is not None and (
+                    gateway.barrier_state != payload.barrier
+                    or gateway.vehicle_count != payload.vehicle_count
+                    or gateway.available_spaces != payload.available_spaces
+                    or gateway.camera_ready != payload.camera.ready
+                    or gateway.camera_error != payload.camera.error
+                ):
+                    meaningful_change = True
+
+                for spot in payload.parking_spots:
+                    existing = existing_slots.get(spot.id)
+                    next_status = "occupied" if spot.occupied else "available"
+                    pin_info = gpio_by_spot.get(spot.id)
+                    if existing is None:
+                        meaningful_change = True
+                    elif (
+                        existing.status != next_status
+                        or existing.pending != spot.pending
+                        or (pin_info is not None and existing.gpio_level != pin_info.level)
+                    ):
+                        meaningful_change = True
+
+                if not meaningful_change and not _should_write_heartbeat(
+                    self._last_neon_status_at,
+                    payload.timestamp,
+                    self._heartbeat_interval_seconds,
+                ):
+                    return
+
+                # Upsert parking slots and record entry/exit events on real transitions.
+                for spot in payload.parking_spots:
+                    next_status = "occupied" if spot.occupied else "available"
+                    pin_info = gpio_by_spot.get(spot.id)
+                    existing = existing_slots.get(spot.id)
+
+                    if existing is None:
+                        session.add(
+                            ParkingSlotRecord(
+                                id=spot.id,
+                                code=spot.id,
+                                device_id=self._gateway_id,
+                                gpio_pin=pin_info.pin if pin_info else None,
+                                gpio_level=pin_info.level if pin_info else None,
+                                status=next_status,
+                                pending=spot.pending,
+                                occupied_since=payload.timestamp if spot.occupied else None,
+                                last_seen_at=payload.timestamp,
+                                updated_at=payload.timestamp,
+                            )
+                        )
+                    else:
+                        previous_status = existing.status
+                        existing.status = next_status
+                        existing.pending = spot.pending
+                        if pin_info is not None:
+                            existing.gpio_pin = pin_info.pin
+                            existing.gpio_level = pin_info.level
+                        if previous_status != "occupied" and next_status == "occupied":
+                            existing.occupied_since = payload.timestamp
+                            session.add(
+                                ParkingActivityEventRecord(
+                                    event_type="entry",
+                                    slot_id=existing.id,
+                                    slot_code=existing.code,
+                                    device_id=existing.device_id,
+                                    summary=f"Vehicle entered Bay {existing.code}",
+                                    detail="Detected by vision and gateway sensors",
+                                    occurred_at=payload.timestamp,
+                                )
+                            )
+                        elif previous_status == "occupied" and next_status == "available":
+                            existing.occupied_since = None
+                            session.add(
+                                ParkingActivityEventRecord(
+                                    event_type="exit",
+                                    slot_id=existing.id,
+                                    slot_code=existing.code,
+                                    device_id=existing.device_id,
+                                    summary=f"Vehicle exited Bay {existing.code}",
+                                    detail="Bay is now available",
+                                    occurred_at=payload.timestamp,
+                                )
+                            )
+                        elif next_status == "available":
+                            existing.occupied_since = None
+
+                        existing.last_seen_at = payload.timestamp
+                        existing.updated_at = payload.timestamp
+
+                # Upsert gateway status.
+                if gateway is None:
+                    gateway = GatewayStatusRecord(
+                        gateway_id=self._gateway_id,
+                        updated_at=payload.timestamp,
+                    )
+                    session.add(gateway)
+
+                gateway.camera_ready = payload.camera.ready
+                gateway.camera_fps = float(payload.camera.fps)
+                gateway.camera_error = payload.camera.error
+                gateway.vehicle_count = payload.vehicle_count
+                gateway.capacity = payload.capacity
+                gateway.available_spaces = payload.available_spaces
+                gateway.is_full = payload.is_full
+                gateway.barrier_state = payload.barrier
+                gateway.servo_target_angle = float(payload.servo_target_angle)
+                gateway.mqtt_connected = payload.mqtt_connected
+                if entrance_ir is not None:
+                    gateway.entrance_detected, gateway.entrance_event_count, gateway.entrance_last_trigger = entrance_ir
+                if exit_ir is not None:
+                    gateway.exit_detected, gateway.exit_event_count, gateway.exit_last_trigger = exit_ir
+                gateway.last_status_at = payload.timestamp
+                gateway.updated_at = payload.timestamp
+
+                if previous_barrier is not None and previous_barrier != payload.barrier:
+                    action = "opened" if payload.barrier == "open" else f"changed to {payload.barrier}"
+                    session.add(
+                        ParkingActivityEventRecord(
+                            event_type="barrier",
+                            device_id=self._gateway_id,
+                            summary=f"Barrier gate {action}",
+                            detail=f"Servo target angle {payload.servo_target_angle:.1f}°",
+                            occurred_at=payload.timestamp,
+                        )
+                    )
+
+            self._last_neon_status_at = payload.timestamp
+
+    def _persist_occupancy_history_tiger(self, payload: ParkingStatusPayload) -> None:
+        if self._telemetry_engine_getter is None:
+            self._warn_tiger_missing()
+            return
+
+        occupied_spots = sum(1 for spot in payload.parking_spots if spot.occupied)
+        capacity = payload.capacity if payload.capacity > 0 else len(payload.parking_spots)
+        available_spots = max(capacity - occupied_spots, 0)
+        occupancy_percent = (occupied_spots / capacity * 100.0) if capacity > 0 else 0.0
+        signature = (occupied_spots, available_spots, payload.vehicle_count, payload.barrier)
+
+        if signature == self._last_occupancy_signature and not _should_write_heartbeat(
+            self._last_occupancy_sample_at,
+            payload.timestamp,
+            self._heartbeat_interval_seconds,
+        ):
+            return
+
+        with self._telemetry_engine_getter().begin() as connection:
+            connection.execute(
+                text("""
+                    INSERT INTO occupancy_history (
+                        gateway_id, measured_at, occupied_spots, available_spots,
+                        capacity, vehicle_count, occupancy_percent, barrier_state
+                    ) VALUES (
+                        :gateway_id, :measured_at, :occupied_spots, :available_spots,
+                        :capacity, :vehicle_count, :occupancy_percent, :barrier_state
+                    )
+                    ON CONFLICT (gateway_id, measured_at) DO NOTHING
+                """),
+                {
+                    "gateway_id": self._gateway_id,
+                    "measured_at": payload.timestamp,
+                    "occupied_spots": occupied_spots,
+                    "available_spots": available_spots,
+                    "capacity": capacity,
+                    "vehicle_count": payload.vehicle_count,
+                    "occupancy_percent": round(occupancy_percent, 2),
+                    "barrier_state": payload.barrier,
+                },
+            )
+
+        self._last_occupancy_sample_at = payload.timestamp
+        self._last_occupancy_signature = signature
+
+    def persist_vision_detection(self, payload: VisionDetectionPayload) -> None:
+        """Persist YOLO inference metadata and spot detections (throttled on steady state)."""
+        with self._lock:
+            if self._session_factory is None:
+                self._warn_neon_missing()
+                return
+
+            detections_by_spot: dict[str, dict[str, Any]] = {}
+            for item in payload.detections:
+                if item.spot_id:
+                    detections_by_spot[item.spot_id] = item.model_dump(mode="json")
+
+            has_detections = bool(detections_by_spot)
+            if not has_detections and not _should_write_heartbeat(
+                self._last_neon_vision_at,
+                payload.timestamp,
+                self._heartbeat_interval_seconds,
+            ):
+                return
+
+            with self._session_factory() as session:
+                with session.begin():
+                    gateway = session.get(GatewayStatusRecord, self._gateway_id)
+                    if gateway is None:
+                        gateway = GatewayStatusRecord(
+                            gateway_id=self._gateway_id,
+                            updated_at=payload.timestamp,
+                        )
+                        session.add(gateway)
+                    gateway.inference_fps = float(payload.inference_fps)
+                    gateway.last_vision_at = payload.timestamp
+                    gateway.updated_at = payload.timestamp
+
+                    if detections_by_spot:
+                        slots = (
+                            session.query(ParkingSlotRecord)
+                            .filter(ParkingSlotRecord.id.in_(list(detections_by_spot)))
+                            .all()
+                        )
+                        for slot in slots:
+                            slot.camera_detection = detections_by_spot[slot.id]
+                            slot.updated_at = payload.timestamp
+
+            self._last_neon_vision_at = payload.timestamp
+
+    def persist_entrance_sensor(self, payload: EntranceSensorPayload) -> None:
+        """Persist entrance/exit IR counters and obstacle readings to Neon."""
+        with self._lock:
+            if self._session_factory is None:
+                self._warn_neon_missing()
+                return
+
+            with self._session_factory() as session:
+                with session.begin():
+                    gateway = session.get(GatewayStatusRecord, self._gateway_id)
+                    changed = gateway is None or (
+                        gateway.vehicle_count != payload.vehicle_count
+                        or gateway.entrance_detected != payload.entrance.detected
+                        or gateway.entrance_event_count != payload.entrance.event_count
+                        or gateway.exit_detected != payload.exit.detected
+                        or gateway.exit_event_count != payload.exit.event_count
+                        or gateway.obstacle_detected != payload.obstacle.detected
+                        or gateway.obstacle_distance_cm != payload.obstacle.distance_cm
+                    )
+                    if not changed and not _should_write_heartbeat(
+                        self._last_neon_entrance_at,
+                        payload.timestamp,
+                        self._heartbeat_interval_seconds,
+                    ):
+                        return
+
+                    if gateway is None:
+                        gateway = GatewayStatusRecord(
+                            gateway_id=self._gateway_id,
+                            updated_at=payload.timestamp,
+                        )
+                        session.add(gateway)
+
+                    gateway.vehicle_count = payload.vehicle_count
+                    gateway.entrance_detected = payload.entrance.detected
+                    gateway.entrance_event_count = payload.entrance.event_count
+                    gateway.entrance_last_trigger = _normalize_timestamp(
+                        payload.entrance.last_trigger
+                    )
+                    gateway.exit_detected = payload.exit.detected
+                    gateway.exit_event_count = payload.exit.event_count
+                    gateway.exit_last_trigger = _normalize_timestamp(payload.exit.last_trigger)
+                    gateway.obstacle_distance_cm = (
+                        float(payload.obstacle.distance_cm)
+                        if payload.obstacle.distance_cm is not None
+                        else None
+                    )
+                    gateway.obstacle_detected = payload.obstacle.detected
+                    gateway.obstacle_threshold_cm = float(payload.obstacle.threshold_cm)
+                    gateway.last_entrance_at = payload.timestamp
+                    gateway.updated_at = payload.timestamp
+
+            self._last_neon_entrance_at = payload.timestamp
+
+    def persist_lighting_status(self, payload: LightingStatusPayload) -> None:
+        """Upsert lighting device state and record a lighting activity event on change."""
+        with self._lock:
+            if self._session_factory is None:
+                self._warn_neon_missing()
+                return
+
+            measured_at = payload.measured_at
+            with self._session_factory() as session:
+                with session.begin():
+                    existing = session.get(LightingStatusRecord, payload.device_id)
+                    if existing is None:
+                        session.add(
+                            LightingStatusRecord(
+                                device_id=payload.device_id,
+                                leds_on=payload.leds_on,
+                                mode="auto",
+                                measured_at=measured_at,
+                                updated_at=measured_at,
+                            )
+                        )
+                        return
+
+                    if _ensure_utc(measured_at) <= _ensure_utc(existing.measured_at):
+                        return
+
+                    previous_leds_on = existing.leds_on
+                    existing.leds_on = payload.leds_on
+                    existing.measured_at = measured_at
+                    existing.updated_at = measured_at
+
+                    if previous_leds_on != payload.leds_on:
+                        state_label = "on" if payload.leds_on else "off"
+                        session.add(
+                            ParkingActivityEventRecord(
+                                event_type="lighting",
+                                device_id=payload.device_id,
+                                summary=f"Parking lights turned {state_label}",
+                                detail=f"Reported by {payload.device_id}",
+                                occurred_at=measured_at,
+                            )
+                        )
+
+    def _warn_neon_missing(self) -> None:
+        if not self._neon_warned:
+            logger.warning("DATABASE_URL is not configured; skipping Neon parking persistence")
+            self._neon_warned = True
+
+    def _warn_tiger_missing(self) -> None:
+        if not self._tiger_warned:
+            logger.warning(
+                "TELEMETRY_DATABASE_URL is not configured; skipping Tiger Cloud occupancy history"
+            )
+            self._tiger_warned = True
