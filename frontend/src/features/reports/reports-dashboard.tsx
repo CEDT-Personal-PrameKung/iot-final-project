@@ -235,10 +235,14 @@ export function ReportsDashboard({ initialSnapshot }: ReportsDashboardProps) {
                 aria-hidden="true"
                 className={cn(
                   "size-1.5 rounded-full",
-                  wsUrl ? "bg-status-available" : "bg-status-warning",
+                  wsUrl || initialSnapshot.dataSource === "live"
+                    ? "bg-status-available"
+                    : "bg-status-warning",
                 )}
               />
-              {wsUrl ? "Live" : "Mock data"}
+              {wsUrl || initialSnapshot.dataSource === "live"
+                ? "Live"
+                : "Mock data"}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">

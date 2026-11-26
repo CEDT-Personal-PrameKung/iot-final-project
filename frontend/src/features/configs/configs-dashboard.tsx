@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
+  AlertCircle,
   CheckCircle2,
   Cpu,
   DoorClosed,
@@ -50,9 +51,10 @@ export function ConfigsDashboard({
     useState<ParkingConfigsSnapshot>(initialConfigs);
   const [focusLayer, setFocusLayer] = useState<ConfigFocusLayer>("all");
   const [selectedBayId, setSelectedBayId] = useState<string | null>(null);
-  const [syncState, setSyncState] = useState<"idle" | "syncing" | "synced">(
-    "synced",
-  );
+  const [syncState, setSyncState] = useState<
+    "idle" | "syncing" | "synced" | "error"
+  >("synced");
+  const [syncError, setSyncError] = useState<string | null>(null);
   const requestSeqRef = useRef(0);
 
   const slotById = useMemo(() => {
@@ -73,21 +75,35 @@ export function ConfigsDashboard({
       updater: (prev: ParkingConfigsSnapshot) => ParkingConfigsSnapshot,
     ) => {
       setSyncState("syncing");
+      setSyncError(null);
       const seq = requestSeqRef.current + 1;
       requestSeqRef.current = seq;
 
       setConfigs((prev) => {
         const next = updater(prev);
-        void saveAdminConfigs(next).then((persisted) => {
-          if (requestSeqRef.current !== seq) {
-            return;
-          }
-          setConfigs((current) => ({
-            ...current,
-            updatedAt: persisted.updatedAt,
-          }));
-          setSyncState("synced");
-        });
+        void saveAdminConfigs(next)
+          .then((persisted) => {
+            if (requestSeqRef.current !== seq) {
+              return;
+            }
+            setConfigs((current) => ({
+              ...current,
+              updatedAt: persisted.updatedAt,
+              dataSource: persisted.dataSource,
+            }));
+            setSyncState("synced");
+          })
+          .catch((error: unknown) => {
+            if (requestSeqRef.current !== seq) {
+              return;
+            }
+            setSyncError(
+              error instanceof Error
+                ? error.message
+                : "Failed to save configuration",
+            );
+            setSyncState("error");
+          });
         return next;
       });
     },
@@ -159,16 +175,24 @@ export function ConfigsDashboard({
         <Badge
           variant="outline"
           role="status"
+          title={syncError ?? undefined}
           className={cn(
             "gap-1.5 tabular-nums",
             syncState === "synced" &&
               "border-transparent bg-status-available-muted text-status-available",
+            syncState === "error" &&
+              "border-transparent bg-status-occupied-muted text-status-occupied",
           )}
         >
           {syncState === "syncing" ? (
             <>
               <Loader2 aria-hidden="true" className="size-3 animate-spin" />
               Applying live…
+            </>
+          ) : syncState === "error" ? (
+            <>
+              <AlertCircle aria-hidden="true" className="size-3" />
+              {syncError ?? "Sync failed"}
             </>
           ) : (
             <>

@@ -387,11 +387,11 @@ export function useParkingStream({
           updatedAt: result.updatedAt,
           recentActivity: prependActivity(prev.recentActivity, lightActivity),
           lights: prev.lights.map((light) =>
-            light.id === result.lightId
+            result.lightId === "all" || light.id === result.lightId
               ? {
                   ...light,
                   isOn: result.isOn,
-                  mode: "manual",
+                  mode: result.mode,
                   updatedAt: result.updatedAt,
                 }
               : light,
