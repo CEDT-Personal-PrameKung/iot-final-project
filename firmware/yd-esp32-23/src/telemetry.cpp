@@ -42,8 +42,10 @@ void applyLightingCommand(const esp_mqtt_event_t& event) {
     lightingMode = LightingMode::On;
   } else if (event.data_len == 3 && memcmp(event.data, "OFF", 3) == 0) {
     lightingMode = LightingMode::Off;
+  } else if (event.data_len == 4 && memcmp(event.data, "AUTO", 4) == 0) {
+    lightingMode = LightingMode::Automatic;
   } else {
-    Serial.println("Invalid lighting command. Expected ON or OFF.");
+    Serial.println("Invalid lighting command. Expected ON, OFF, or AUTO.");
   }
 }
 
