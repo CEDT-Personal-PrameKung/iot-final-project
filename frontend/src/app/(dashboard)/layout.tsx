@@ -36,7 +36,6 @@ export default function DashboardLayout({
             >
               <SessionNavigation />
             </Suspense>
-            <ThemeToggle />
           </nav>
         </div>
       </header>
@@ -69,14 +68,17 @@ async function SessionNavigation() {
           role={sessionUser.role}
         />
       ) : (
-        <Button
-          nativeButton={false}
-          render={<Link href="/login" />}
-          variant="outline"
-        >
-          <LogIn aria-hidden="true" data-icon="inline-start" />
-          Login
-        </Button>
+        <>
+          <ThemeToggle />
+          <Button
+            nativeButton={false}
+            render={<Link href="/login" />}
+            variant="outline"
+          >
+            <LogIn aria-hidden="true" data-icon="inline-start" />
+            Login
+          </Button>
+        </>
       )}
     </>
   );

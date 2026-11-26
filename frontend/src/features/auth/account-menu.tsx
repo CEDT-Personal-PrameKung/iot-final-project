@@ -1,8 +1,9 @@
 "use client";
 
 import { useTransition } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut, Moon, Sun } from "lucide-react";
 
+import { toggleColorTheme } from "@/components/shared/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -58,6 +59,18 @@ export function AccountMenu({
                         </span>
                     </DropdownMenuLabel>
                 </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    closeOnClick={false}
+                    onClick={() => {
+                        toggleColorTheme();
+                    }}
+                >
+                    <Sun aria-hidden="true" className="hidden dark:block" />
+                    <Moon aria-hidden="true" className="block dark:hidden" />
+                    <span className="hidden dark:inline">Light mode</span>
+                    <span className="inline dark:hidden">Dark mode</span>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                     variant="destructive"
