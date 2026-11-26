@@ -1,7 +1,16 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, responses
 from fastapi.middleware.cors import CORSMiddleware
 from scalar_doc import ScalarDoc
 from src.api.health import router as health_router
+from src.features.parking.router import (
+    close_shared_mqtt_publisher,
+    configs_router,
+    parking_router,
+    reports_router,
+)
 from src.features.users.router import router as users_router
 from src.settings import get_settings
 
@@ -14,6 +23,13 @@ cors_origins = [
 if not cors_origins and settings.app_env == "development":
     cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    yield
+    close_shared_mqtt_publisher()
+
+
 app = FastAPI(
     title="Smart Parking API",
     description="Backend API for the Smart Parking IoT application.",
@@ -21,6 +37,7 @@ app = FastAPI(
     servers=[{"url": "/", "description": "Current backend"}],
     docs_url=None,
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -33,6 +50,9 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(users_router)
+app.include_router(parking_router)
+app.include_router(reports_router)
+app.include_router(configs_router)
 
 docs = ScalarDoc.from_spec(spec=app.openapi_url, mode="url")
 

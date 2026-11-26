@@ -46,6 +46,13 @@ create or alter tables automatically at startup.
 The API is available at `http://127.0.0.1:8000`; Scalar API documentation is
 available at `/docs`, backed by FastAPI's `/openapi.json` schema.
 
+Main REST endpoints:
+
+- `GET /parking/overview` — current slots (`P1`–`P6`), latest environment telemetry, lighting state, occupancy history, and recent activity.
+- `POST /parking/lighting` — authenticated endpoint to publish `ON`, `OFF`, or `AUTO` to `parking/control/lighting`.
+- `GET /reports/activity` — filterable parking activity log history.
+- `GET /configs` and `PUT /configs` — admin-only sensor, lighting, barrier, and bay configuration endpoints.
+
 Register a guest account with `POST /auth/register` using an email and a
 password of 8–128 characters. Emails are normalized to lowercase, passwords
 are stored as Argon2 hashes, and duplicate emails return HTTP 409. The endpoint
