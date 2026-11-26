@@ -130,17 +130,17 @@ export function ConfigsDashboard({
   );
 
   const handleToggleMapLight = useCallback(
-    (lightId: string, nextState: boolean) => {
+    (_lightId: string, nextState: boolean) => {
       applyRealtimeUpdate((prev) => ({
         ...prev,
         lighting: {
           ...prev.lighting,
           globalMode: "manual",
-          lights: prev.lighting.lights.map((light) =>
-            light.id === lightId
-              ? { ...light, mode: "manual", isOn: nextState }
-              : light,
-          ),
+          lights: prev.lighting.lights.map((light) => ({
+            ...light,
+            mode: "manual",
+            isOn: nextState,
+          })),
         },
       }));
     },
