@@ -26,6 +26,21 @@ interface ParkingLotMapProps {
   onSelectSlot: (slot: ParkingSlot) => void;
 }
 
+const matchedCellStyles: Record<ParkingSlotStatus, string> = {
+  available:
+    "z-[5] bg-status-available-muted/90 ring-2 ring-inset ring-status-available hover:bg-status-available-muted",
+  occupied:
+    "z-[5] bg-status-occupied-muted/85 ring-2 ring-inset ring-status-occupied hover:bg-status-occupied-muted",
+  offline:
+    "z-[5] bg-muted/90 ring-2 ring-inset ring-foreground/55 hover:bg-muted",
+};
+
+const filterDotStyles: Record<ParkingSlotStatus, string> = {
+  available: "bg-status-available",
+  occupied: "bg-status-occupied",
+  offline: "bg-muted-foreground",
+};
+
 function splitSlotsIntoRows(slots: ParkingSlot[]): ParkingSlot[][] {
   if (slots.length === 0) {
     return [];
@@ -67,6 +82,13 @@ export function ParkingLotMap({
     () => rows.reduce((max, row) => Math.max(max, row.length), 1),
     [rows],
   );
+  const matchedCount = useMemo(
+    () =>
+      statusFilter === "all"
+        ? slots.length
+        : slots.filter((slot) => slot.status === statusFilter).length,
+    [slots, statusFilter],
+  );
 
   return (
     <div className="flex flex-col gap-4 rounded-2xl border bg-muted/40 p-4 sm:p-5">
@@ -79,10 +101,7 @@ export function ParkingLotMap({
             }}
           >
             {rowPairs.map((pair, pairIndex) => (
-              <div
-                key={`pair-${pairIndex}`}
-                className="flex flex-col"
-              >
+              <div key={`pair-${pairIndex}`} className="flex flex-col">
                 {pair.map((row, rowIndexInPair) => {
                   const isTopFacingRow = rowIndexInPair === 0 && pair.length > 1;
                   const facing: "up" | "down" = isTopFacingRow ? "down" : "up";
@@ -102,8 +121,11 @@ export function ParkingLotMap({
                         const isOccupied = slot.status === "occupied";
                         const isOffline = slot.status === "offline";
                         const isSelected = slot.id === selectedSlotId;
+                        const isFiltered = statusFilter !== "all";
+                        const isMatched =
+                          isFiltered && slot.status === statusFilter;
                         const isDimmed =
-                          statusFilter !== "all" && slot.status !== statusFilter;
+                          isFiltered && slot.status !== statusFilter;
                         const vehicleType =
                           slot.cameraDetection?.vehicleType ?? "car";
                         const vehicleLabel = slot.cameraDetection
@@ -120,15 +142,18 @@ export function ParkingLotMap({
                                   aria-pressed={isSelected}
                                   aria-label={`Bay ${slot.code}, ${SLOT_STATUS_LABEL[slot.status]}${isOccupied ? `, ${vehicleLabel}` : ""}`}
                                   className={cn(
-                                    "group relative flex h-36 items-center justify-center border-l border-border px-2 py-2.5 transition-all focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-40 sm:px-3 sm:py-3",
+                                    "group relative flex h-36 items-center justify-center border-l border-border px-2 py-2.5 transition-all focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-40 sm:px-3 sm:py-3",
                                     colIndex === row.length - 1 &&
                                       "border-r border-border",
                                     isSelected
-                                      ? "z-10 bg-status-warning-muted/80 ring-1 ring-inset ring-status-warning"
-                                      : isOffline
-                                        ? "bg-muted/40 hover:bg-muted/70"
-                                        : "hover:bg-accent/50",
-                                    isDimmed && "opacity-30",
+                                      ? "z-10 bg-status-warning-muted/85 ring-2 ring-inset ring-status-warning"
+                                      : isMatched
+                                        ? matchedCellStyles[slot.status]
+                                        : isDimmed
+                                          ? "bg-muted/35 opacity-20 grayscale hover:opacity-65 hover:grayscale-0"
+                                          : isOffline
+                                            ? "bg-muted/40 hover:bg-muted/70"
+                                            : "hover:bg-accent/50",
                                   )}
                                 />
                               }
@@ -138,10 +163,13 @@ export function ParkingLotMap({
                                   <span
                                     aria-hidden="true"
                                     className={cn(
-                                      "pointer-events-none absolute left-2 font-mono text-[10px] font-medium text-muted-foreground/70 transition-colors group-hover:text-foreground",
+                                      "pointer-events-none absolute left-2 flex items-center gap-1 rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium transition-colors",
                                       facing === "down"
                                         ? "top-1.5"
                                         : "bottom-1.5",
+                                      isMatched
+                                        ? "bg-status-occupied text-status-occupied-foreground shadow-xs"
+                                        : "text-muted-foreground/75 group-hover:text-foreground",
                                     )}
                                   >
                                     {slot.code}
@@ -155,22 +183,59 @@ export function ParkingLotMap({
                                   </div>
                                 </>
                               ) : isOffline ? (
-                                <div className="flex flex-col items-center justify-center gap-1.5 text-muted-foreground/70">
-                                  <WifiOff
-                                    aria-hidden="true"
-                                    className="size-4"
-                                  />
-                                  <span className="font-mono text-sm font-medium tracking-tight">
+                                <div
+                                  className={cn(
+                                    "flex flex-col items-center justify-center gap-1.5 transition-colors",
+                                    isMatched
+                                      ? "text-foreground"
+                                      : "text-muted-foreground/70",
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "flex size-8 items-center justify-center rounded-full",
+                                      isMatched
+                                        ? "bg-foreground/10 text-foreground"
+                                        : "bg-transparent",
+                                    )}
+                                  >
+                                    <WifiOff
+                                      aria-hidden="true"
+                                      className="size-4"
+                                    />
+                                  </span>
+                                  <span className="font-mono text-sm font-semibold tracking-tight">
                                     {slot.code}
                                   </span>
-                                  <span className="text-[10px] uppercase tracking-wider">
+                                  <span
+                                    className={cn(
+                                      "rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+                                      isMatched
+                                        ? "bg-foreground text-background"
+                                        : "",
+                                    )}
+                                  >
                                     Offline
                                   </span>
                                 </div>
                               ) : (
-                                <span className="font-mono text-base font-medium tracking-tight text-muted-foreground transition-colors group-hover:text-foreground sm:text-lg">
-                                  {slot.code}
-                                </span>
+                                <div className="flex flex-col items-center justify-center gap-1.5">
+                                  <span
+                                    className={cn(
+                                      "font-mono text-base font-semibold tracking-tight transition-colors sm:text-lg",
+                                      isMatched
+                                        ? "text-status-available"
+                                        : "font-medium text-muted-foreground group-hover:text-foreground",
+                                    )}
+                                  >
+                                    {slot.code}
+                                  </span>
+                                  {isMatched && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-status-available px-2.5 py-0.5 text-[11px] font-medium text-status-available-foreground shadow-xs">
+                                      Available
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </TooltipTrigger>
 
@@ -208,16 +273,16 @@ export function ParkingLotMap({
           <span className="flex items-center gap-1.5">
             <span
               aria-hidden="true"
-              className="size-2.5 rounded-full border border-border bg-card"
+              className="size-2.5 rounded-full bg-status-available"
             />
             Available
           </span>
           <span className="flex items-center gap-1.5">
             <span
               aria-hidden="true"
-              className="size-2.5 rounded-full bg-foreground/80"
+              className="size-2.5 rounded-full bg-status-occupied"
             />
-            Occupied (vehicle)
+            Occupied
           </span>
           <span className="flex items-center gap-1.5">
             <span
@@ -229,12 +294,28 @@ export function ParkingLotMap({
           <span className="flex items-center gap-1.5">
             <span
               aria-hidden="true"
-              className="size-2.5 rounded-full bg-muted-foreground/40"
+              className="size-2.5 rounded-full bg-muted-foreground/60"
             />
             Offline
           </span>
         </div>
-        <span>Click any bay to inspect sensors</span>
+
+        {statusFilter !== "all" ? (
+          <span className="inline-flex items-center gap-1.5 font-medium text-foreground tabular-nums">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "size-2 rounded-full",
+                filterDotStyles[statusFilter],
+              )}
+            />
+            Highlighting {matchedCount}{" "}
+            {SLOT_STATUS_LABEL[statusFilter].toLowerCase()}{" "}
+            {matchedCount === 1 ? "bay" : "bays"}
+          </span>
+        ) : (
+          <span>Click any bay to inspect sensors</span>
+        )}
       </div>
     </div>
   );

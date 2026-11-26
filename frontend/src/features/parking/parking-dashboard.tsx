@@ -181,13 +181,25 @@ export function ParkingDashboard({ initialSnapshot }: ParkingDashboardProps) {
             <TabsList>
               <TabsTrigger value="all">All ({summary.total})</TabsTrigger>
               <TabsTrigger value="available">
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 rounded-full bg-status-available"
+                />
                 Available ({summary.available})
               </TabsTrigger>
               <TabsTrigger value="occupied">
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 rounded-full bg-status-occupied"
+                />
                 Occupied ({summary.occupied})
               </TabsTrigger>
               {summary.offline > 0 && (
                 <TabsTrigger value="offline">
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 rounded-full bg-muted-foreground"
+                  />
                   Offline ({summary.offline})
                 </TabsTrigger>
               )}
