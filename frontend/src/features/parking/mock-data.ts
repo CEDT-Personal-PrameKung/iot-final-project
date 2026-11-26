@@ -105,7 +105,7 @@ export const MOCK_PARKING_SNAPSHOT: ParkingOverviewSnapshot = {
     {
       id: "light-1",
       label: "Bay Light 1",
-      zone: "Zone A (A-01 – A-02)",
+      zone: "Left Road (A-01 / A-04)",
       isOn: true,
       mode: "auto",
       updatedAt: "2026-11-25T15:28:00.000Z",
@@ -113,7 +113,7 @@ export const MOCK_PARKING_SNAPSHOT: ParkingOverviewSnapshot = {
     {
       id: "light-2",
       label: "Bay Light 2",
-      zone: "Zone A (A-03 – A-04)",
+      zone: "Top Road (Behind A-02)",
       isOn: true,
       mode: "auto",
       updatedAt: "2026-11-25T15:28:00.000Z",
@@ -121,7 +121,7 @@ export const MOCK_PARKING_SNAPSHOT: ParkingOverviewSnapshot = {
     {
       id: "light-3",
       label: "Bay Light 3",
-      zone: "Zone A (A-05 – A-06)",
+      zone: "Right Road (A-03 / A-06)",
       isOn: false,
       mode: "manual",
       updatedAt: "2026-11-25T15:20:00.000Z",

@@ -6,11 +6,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getSessionUser } from "@/features/auth/session";
 import { ConfigsDashboard } from "@/features/configs/configs-dashboard";
 import { getAdminConfigs } from "@/lib/api/configs";
+import { getParkingOverview } from "@/lib/api/parking";
 
 export const metadata: Metadata = {
   title: "Configs",
   description:
-    "Configure Smart Parking sensor thresholds, lighting automation, and edge devices.",
+    "Configure Smart Parking sensor thresholds, lighting automation, barrier gate, and edge devices.",
 };
 
 export default function ConfigsPage() {
@@ -32,11 +33,15 @@ async function AdminConfigsPage() {
     redirect("/parking");
   }
 
-  const configs = await getAdminConfigs();
+  const [configs, parking] = await Promise.all([
+    getAdminConfigs(),
+    getParkingOverview(),
+  ]);
 
   return (
     <ConfigsDashboard
       initialConfigs={configs}
+      initialParking={parking}
       adminEmail={sessionUser.email}
     />
   );
@@ -52,11 +57,14 @@ function ConfigsPageSkeleton() {
         <Skeleton className="h-9 w-40" />
         <Skeleton className="h-4 w-80" />
       </div>
-      <Skeleton className="h-9 w-72 rounded-lg" />
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Skeleton className="h-80 rounded-xl" />
-        <Skeleton className="h-80 rounded-xl" />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
       </div>
+      <Skeleton className="h-18 rounded-xl" />
+      <Skeleton className="h-96 rounded-2xl" />
     </main>
   );
 }

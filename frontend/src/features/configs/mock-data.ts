@@ -18,7 +18,7 @@ export const MOCK_ADMIN_CONFIGS: ParkingConfigsSnapshot = {
       {
         id: "light-1",
         label: "Bay Light 1",
-        zone: "Zone A (A-01 – A-02)",
+        zone: "Left Road (A-01 / A-04)",
         mode: "auto",
         isOn: true,
         topic: "parking/control/lighting",
@@ -26,7 +26,7 @@ export const MOCK_ADMIN_CONFIGS: ParkingConfigsSnapshot = {
       {
         id: "light-2",
         label: "Bay Light 2",
-        zone: "Zone A (A-03 – A-04)",
+        zone: "Top Road (Behind A-02)",
         mode: "auto",
         isOn: true,
         topic: "parking/control/lighting",
@@ -34,12 +34,22 @@ export const MOCK_ADMIN_CONFIGS: ParkingConfigsSnapshot = {
       {
         id: "light-3",
         label: "Bay Light 3",
-        zone: "Zone A (A-05 – A-06)",
+        zone: "Right Road (A-03 / A-06)",
         mode: "manual",
         isOn: false,
         topic: "parking/control/lighting",
       },
     ],
+  },
+  barrier: {
+    deviceId: "esp32-s3-gate-01",
+    state: "closed",
+    mode: "auto",
+    autoCloseEnabled: true,
+    autoCloseDelaySeconds: 8,
+    irSafetyBeamEnabled: true,
+    topic: "parking/actuator/command",
+    lastOperatedAt: "2026-11-25T15:18:42.000Z",
   },
   bays: [
     {

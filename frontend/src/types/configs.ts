@@ -45,9 +45,23 @@ export interface GatewayNodeStatus {
   lastSeenAt: string;
 }
 
+export type BarrierGateState = "open" | "closed";
+
+export interface BarrierGateConfig {
+  deviceId: string;
+  state: BarrierGateState;
+  mode: LightingControlMode;
+  autoCloseEnabled: boolean;
+  autoCloseDelaySeconds: number;
+  irSafetyBeamEnabled: boolean;
+  topic: string;
+  lastOperatedAt: string;
+}
+
 export interface ParkingConfigsSnapshot {
   sensors: SensorThresholds;
   lighting: LightingAutomationConfigs;
+  barrier: BarrierGateConfig;
   bays: ManagedBayConfig[];
   gateways: GatewayNodeStatus[];
   updatedAt: string;
