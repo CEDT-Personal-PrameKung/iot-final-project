@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CarFront, Radio, RotateCcw, Shuffle } from "lucide-react";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { CarFront, Radio, RotateCcw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { EnvironmentLightingSection } from "@/features/parking/environment-light
 import {
   STREAM_STATUS_LABEL,
   computeParkingSummary,
+  formatRelativeUpdatedTime,
   formatTelemetryTime,
 } from "@/features/parking/formatters";
 import {
@@ -41,6 +42,49 @@ const streamDotStyles: Record<ParkingStreamStatus, string> = {
   disconnected: "bg-status-occupied",
 };
 
+let currentNowMs = 0;
+const nowListeners = new Set<() => void>();
+let nowIntervalId: ReturnType<typeof setInterval> | null = null;
+
+function subscribeNow(callback: () => void) {
+  nowListeners.add(callback);
+  if (!nowIntervalId) {
+    currentNowMs = Date.now();
+    nowIntervalId = setInterval(() => {
+      currentNowMs = Date.now();
+      for (const listener of nowListeners) {
+        listener();
+      }
+    }, 15_000);
+  }
+  return () => {
+    nowListeners.delete(callback);
+    if (nowListeners.size === 0 && nowIntervalId) {
+      clearInterval(nowIntervalId);
+      nowIntervalId = null;
+    }
+  };
+}
+
+function getNowSnapshot() {
+  if (currentNowMs === 0) {
+    currentNowMs = Date.now();
+  }
+  return currentNowMs;
+}
+
+function getServerNowSnapshot() {
+  return null;
+}
+
+function useCurrentTime(): number | null {
+  return useSyncExternalStore(
+    subscribeNow,
+    getNowSnapshot,
+    getServerNowSnapshot,
+  );
+}
+
 interface ParkingDashboardProps {
   initialSnapshot: ParkingOverviewSnapshot;
   isAdmin: boolean;
@@ -57,13 +101,13 @@ export function ParkingDashboard({
     pendingLightIds,
     toggleLight,
     simulateSlotStatus,
-    simulateRandomEvent,
     resetMockSnapshot,
   } = useParkingStream({
     initialSnapshot,
     wsUrl,
   });
   const isMockMode = streamStatus === "mock";
+  const nowMs = useCurrentTime();
 
   const [filter, setFilter] = useState<SlotFilter>("all");
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
@@ -89,42 +133,36 @@ export function ParkingDashboard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="gap-1.5">
-            <span
-              aria-hidden="true"
-              className={cn(
-                "size-2 rounded-full",
-                streamDotStyles[streamStatus],
-              )}
-            />
-            {STREAM_STATUS_LABEL[streamStatus]}
-          </Badge>
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+          {!isMockMode && (
+            <Badge variant="outline" className="gap-1.5">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-2 rounded-full",
+                  streamDotStyles[streamStatus],
+                )}
+              />
+              {STREAM_STATUS_LABEL[streamStatus]}
+            </Badge>
+          )}
+          <span
+            title={`Last updated ${formatTelemetryTime(snapshot.updatedAt)}`}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums"
+          >
             <Radio aria-hidden="true" className="size-3.5" />
-            Updated {formatTelemetryTime(snapshot.updatedAt)}
+            {formatRelativeUpdatedTime(snapshot.updatedAt, nowMs)}
           </span>
           {isMockMode && (
-            <div className="flex items-center gap-1.5 pl-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={simulateRandomEvent}
-              >
-                <Shuffle aria-hidden="true" data-icon="inline-start" />
-                Simulate vehicle
-              </Button>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                aria-label="Reset mock data"
-                title="Reset mock data"
-                onClick={resetMockSnapshot}
-              >
-                <RotateCcw aria-hidden="true" />
-              </Button>
-            </div>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Refresh parking data"
+              title="Refresh parking data"
+              onClick={resetMockSnapshot}
+            >
+              <RotateCcw aria-hidden="true" />
+            </Button>
           )}
         </div>
       </div>

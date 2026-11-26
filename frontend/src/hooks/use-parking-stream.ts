@@ -485,6 +485,7 @@ export function useParkingStream({
     }
     setSnapshot({
       ...initialSnapshot,
+      updatedAt: new Date().toISOString(),
       recentActivity: initialSnapshot.recentActivity.slice(
         0,
         MAX_ACTIVITY_EVENTS,

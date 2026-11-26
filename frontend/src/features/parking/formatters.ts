@@ -55,6 +55,37 @@ export function formatTelemetryDateTime(isoTimestamp: string): string {
   return dateTimeFormatter.format(date);
 }
 
+export function formatRelativeUpdatedTime(
+  isoTimestamp: string,
+  nowMs: number | null,
+): string {
+  const targetMs = Date.parse(isoTimestamp);
+  if (Number.isNaN(targetMs)) {
+    return "Updated —";
+  }
+  if (nowMs === null) {
+    return "Updated recently";
+  }
+
+  const diffSeconds = Math.max(0, Math.floor((nowMs - targetMs) / 1000));
+  if (diffSeconds < 60) {
+    return "Updated just now";
+  }
+
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) {
+    return `Updated ${diffMinutes} min ago`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `Updated ${diffHours} hr ago`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `Updated ${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
+}
+
 export const SLOT_STATUS_LABEL: Record<ParkingSlotStatus, string> = {
   available: "Available",
   occupied: "Occupied",
