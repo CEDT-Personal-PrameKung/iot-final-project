@@ -1,10 +1,11 @@
 """MQTT integration with the cloud broker."""
 
 from src.mqtt.client import MqttConfig, build_tls_context, create_mqtt_client, load_mqtt_config
-from src.mqtt.publisher import LightingCommand, MqttPublisher, build_publisher
+from src.mqtt.publisher import BarrierCommand, LightingCommand, MqttPublisher, build_publisher
 from src.mqtt.subscriber import MessageHandler, MqttSubscriber, build_default_subscriber
 from src.mqtt.topics import (
     SUBSCRIBED_TOPICS,
+    TOPIC_BARRIER_CONTROL,
     TOPIC_ENTRANCE_SENSOR,
     TOPIC_ENVIRONMENT_SENSOR,
     TOPIC_LIGHTING_CONTROL,
@@ -14,12 +15,14 @@ from src.mqtt.topics import (
 )
 
 __all__ = [
+    "BarrierCommand",
     "LightingCommand",
     "MessageHandler",
     "MqttConfig",
     "MqttPublisher",
     "MqttSubscriber",
     "SUBSCRIBED_TOPICS",
+    "TOPIC_BARRIER_CONTROL",
     "TOPIC_ENTRANCE_SENSOR",
     "TOPIC_ENVIRONMENT_SENSOR",
     "TOPIC_LIGHTING_CONTROL",

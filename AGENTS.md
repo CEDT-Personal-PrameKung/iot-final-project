@@ -98,7 +98,7 @@ The following topics are the active project convention (see [`docs/mqtt/topics.m
 | `parking/sensor/environment` | YD-ESP32-23 | Raspberry Pi 5, backend | QoS 0 / No | [LDR and BME280 readings](docs/architecture/esp32-telemetry.md) |
 | `parking/lighting/status` | YD-ESP32-23 | Raspberry Pi 5, backend | QoS 0 / Retained | Current state (`leds_on`) of the three parking lights |
 | `parking/control/lighting` | Backend, Raspberry Pi 5 | YD-ESP32-23 | QoS 1 / No | Lighting commands (`ON`, `OFF`, or `AUTO`) |
-| `parking/actuator/command` | Backend | ESP32-S3 and/or Raspberry Pi 5 | QoS 1 / No | Reserved for future authorized actuator commands (e.g. barrier gate) |
+| `parking/control/barrier` | Backend | Raspberry Pi 5 | QoS 1 / No | Barrier gate commands (`OPEN`, `CLOSE`, or `AUTO`) |
 
 Define payload schemas, timestamps, units, device IDs, QoS, retain behavior, and command acknowledgement behavior in `docs/architecture/` before relying on them in production.
 

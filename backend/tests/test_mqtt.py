@@ -15,6 +15,7 @@ from src.mqtt.publisher import MqttPublisher
 from src.mqtt.subscriber import MqttSubscriber, build_default_subscriber
 from src.mqtt.topics import (
     SUBSCRIBED_TOPICS,
+    TOPIC_BARRIER_CONTROL,
     TOPIC_ENTRANCE_SENSOR,
     TOPIC_ENVIRONMENT_SENSOR,
     TOPIC_LIGHTING_CONTROL,
@@ -318,6 +319,37 @@ class MqttPublisherTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             publisher.publish_lighting_command("BLINK")  # type: ignore[arg-type]
+
+    def test_publish_barrier_command_open_close_and_auto(self) -> None:
+        fake_client: FakeMqttClient | None = None
+
+        def factory(_config: MqttConfig, **kwargs: object) -> FakeMqttClient:
+            nonlocal fake_client
+            fake_client = FakeMqttClient(**kwargs)  # type: ignore[arg-type]
+            return fake_client
+
+        with MqttPublisher(self.config, client_factory=factory) as publisher:
+            publisher.publish_barrier_command("OPEN")
+            publisher.publish_barrier_command("CLOSE")
+            publisher.publish_barrier_command("AUTO")
+
+        assert fake_client is not None
+        self.assertEqual(
+            fake_client.published_messages,
+            [
+                (TOPIC_BARRIER_CONTROL, "OPEN", 1, False),
+                (TOPIC_BARRIER_CONTROL, "CLOSE", 1, False),
+                (TOPIC_BARRIER_CONTROL, "AUTO", 1, False),
+            ],
+        )
+
+    def test_rejects_invalid_barrier_command(self) -> None:
+        publisher = MqttPublisher(
+            self.config,
+            client_factory=lambda _cfg, **kw: FakeMqttClient(**kw),  # type: ignore[arg-type]
+        )
+        with self.assertRaises(ValueError):
+            publisher.publish_barrier_command("HALF")  # type: ignore[arg-type]
 
     def test_raises_on_publish_failure(self) -> None:
         publisher = MqttPublisher(

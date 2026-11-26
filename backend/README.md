@@ -50,6 +50,7 @@ Main REST endpoints:
 
 - `GET /parking/overview` — current slots (`P1`–`P6`), latest environment telemetry, lighting state, occupancy history, and recent activity.
 - `POST /parking/lighting` — authenticated endpoint to publish `ON`, `OFF`, or `AUTO` to `parking/control/lighting`.
+- `POST /parking/barrier` — admin-only endpoint to publish `OPEN`, `CLOSE`, or `AUTO` to `parking/control/barrier`.
 - `GET /reports/activity` — filterable parking activity log history.
 - `GET /configs` and `PUT /configs` — admin-only sensor, lighting, barrier, and bay configuration endpoints.
 - `WS /ws/parking` — real-time WebSocket stream pushing an initial `snapshot` followed by incremental `slot_status`, `environment_update`, `lighting_status`, and `activity_event` updates while clients are connected.

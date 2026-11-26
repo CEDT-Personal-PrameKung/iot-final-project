@@ -10,12 +10,13 @@ from typing import Any, Literal
 import paho.mqtt.client as mqtt
 
 from src.mqtt.client import MqttConfig, create_mqtt_client, load_mqtt_config
-from src.mqtt.topics import TOPIC_LIGHTING_CONTROL
+from src.mqtt.topics import TOPIC_BARRIER_CONTROL, TOPIC_LIGHTING_CONTROL
 from src.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
 LightingCommand = Literal["ON", "OFF", "AUTO"]
+BarrierCommand = Literal["OPEN", "CLOSE", "AUTO"]
 ClientFactory = Callable[..., mqtt.Client]
 
 DEFAULT_CONNECT_TIMEOUT_SECONDS = 5.0
@@ -138,6 +139,23 @@ class MqttPublisher:
             raise ValueError("Lighting command must be 'ON', 'OFF', or 'AUTO'")
         self.publish(
             TOPIC_LIGHTING_CONTROL,
+            command,
+            qos=1,
+            retain=False,
+            timeout=timeout,
+        )
+
+    def publish_barrier_command(
+        self,
+        command: BarrierCommand,
+        *,
+        timeout: float = DEFAULT_PUBLISH_TIMEOUT_SECONDS,
+    ) -> None:
+        """Publish an authorized OPEN/CLOSE/AUTO barrier gate command to Raspberry Pi 5."""
+        if command not in ("OPEN", "CLOSE", "AUTO"):
+            raise ValueError("Barrier command must be 'OPEN', 'CLOSE', or 'AUTO'")
+        self.publish(
+            TOPIC_BARRIER_CONTROL,
             command,
             qos=1,
             retain=False,

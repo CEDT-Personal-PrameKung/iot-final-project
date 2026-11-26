@@ -12,6 +12,7 @@ All edge nodes (Raspberry Pi 5, YD-ESP32-23) and the FastAPI backend connect dir
 | `parking/sensor/environment` | YD-ESP32-23 | Raspberry Pi 5, Backend | 0 | No | Tiger Cloud (`environment_readings`) |
 | `parking/lighting/status` | YD-ESP32-23 | Raspberry Pi 5, Backend | 0 | Yes | Neon (`lighting_status`, `parking_activity_events` on toggle) |
 | `parking/control/lighting` | Backend, Raspberry Pi 5 | YD-ESP32-23 | 1 | No | Authorized command (`ON`, `OFF`, `AUTO`) |
+| `parking/control/barrier` | Backend | Raspberry Pi 5 | 1 | No | Authorized barrier gate command (`OPEN`, `CLOSE`, `AUTO`) |
 
 ---
 
@@ -145,3 +146,13 @@ Plain-text command published with QoS 1 and `retain=false`:
 - `ON` — turn all three parking lights on (manual override)
 - `OFF` — turn all three parking lights off (manual override)
 - `AUTO` — return parking lights to automatic LDR control
+
+### 7. `parking/control/barrier`
+
+Plain-text command published with QoS 1 and `retain=false` for the Raspberry Pi 5 servo barrier gate:
+
+- `OPEN` — open the barrier gate manually (manual override)
+- `CLOSE` — close the barrier gate manually (manual override)
+- `AUTO` — return the barrier gate to automatic entrance/exit IR + ultrasonic control
+
+Retained commands should be ignored on subscription so a gateway reboot never opens the gate unexpectedly.

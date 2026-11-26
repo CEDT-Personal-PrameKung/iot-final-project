@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from src.mqtt.publisher import LightingCommand
+from src.mqtt.publisher import BarrierCommand, LightingCommand
 
 ParkingSlotStatusType = Literal["available", "occupied", "offline"]
 VehicleType = Literal["car", "suv", "motorcycle", "truck", "unknown"]
@@ -117,6 +117,32 @@ class LightingCommandResponse(ApiModel):
     updated_at: datetime = Field(alias="updatedAt")
 
 
+class BarrierCommandRequest(ApiModel):
+    command: BarrierCommand | None = None
+    state: BarrierGateStateType | None = None
+
+    @model_validator(mode="after")
+    def ensure_command_or_state(self) -> BarrierCommandRequest:
+        if self.command is None and self.state is None:
+            raise ValueError(
+                "Either 'command' ('OPEN'|'CLOSE'|'AUTO') or 'state' ('open'|'closed') must be provided"
+            )
+        return self
+
+    def resolved_command(self) -> BarrierCommand:
+        if self.command is not None:
+            return self.command
+        return "OPEN" if self.state == "open" else "CLOSE"
+
+
+class BarrierCommandResponse(ApiModel):
+    device_id: str = Field(alias="deviceId")
+    command: BarrierCommand
+    state: BarrierGateStateType
+    mode: LightingControlModeType
+    updated_at: datetime = Field(alias="updatedAt")
+
+
 class ActivityReportsResponse(ApiModel):
     logs: list[ParkingActivityEventResponse]
     updated_at: datetime = Field(alias="updatedAt")
@@ -181,7 +207,7 @@ class BarrierGateConfig(ApiModel):
         default=8, ge=1, le=300, alias="autoCloseDelaySeconds"
     )
     ir_safety_beam_enabled: bool = Field(default=True, alias="irSafetyBeamEnabled")
-    topic: str = "parking/actuator/command"
+    topic: str = "parking/control/barrier"
     last_operated_at: datetime = Field(alias="lastOperatedAt")
 
 

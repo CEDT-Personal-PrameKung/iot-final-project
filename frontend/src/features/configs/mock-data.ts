@@ -48,7 +48,7 @@ export const MOCK_ADMIN_CONFIGS: ParkingConfigsSnapshot = {
     autoCloseEnabled: true,
     autoCloseDelaySeconds: 8,
     irSafetyBeamEnabled: true,
-    topic: "parking/actuator/command",
+    topic: "parking/control/barrier",
     lastOperatedAt: "2026-11-25T15:18:42.000Z",
   },
   bays: [

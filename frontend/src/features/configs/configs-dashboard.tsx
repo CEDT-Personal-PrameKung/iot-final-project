@@ -49,6 +49,7 @@ export function ConfigsDashboard({
 }: ConfigsDashboardProps) {
   const [configs, setConfigs] =
     useState<ParkingConfigsSnapshot>(initialConfigs);
+  const configsRef = useRef<ParkingConfigsSnapshot>(initialConfigs);
   const [focusLayer, setFocusLayer] = useState<ConfigFocusLayer>("all");
   const [selectedBayId, setSelectedBayId] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<
@@ -79,33 +80,35 @@ export function ConfigsDashboard({
       const seq = requestSeqRef.current + 1;
       requestSeqRef.current = seq;
 
-      setConfigs((prev) => {
-        const next = updater(prev);
-        void saveAdminConfigs(next)
-          .then((persisted) => {
-            if (requestSeqRef.current !== seq) {
-              return;
-            }
-            setConfigs((current) => ({
-              ...current,
-              updatedAt: persisted.updatedAt,
-              dataSource: persisted.dataSource,
-            }));
-            setSyncState("synced");
-          })
-          .catch((error: unknown) => {
-            if (requestSeqRef.current !== seq) {
-              return;
-            }
-            setSyncError(
-              error instanceof Error
-                ? error.message
-                : "Failed to save configuration",
-            );
-            setSyncState("error");
-          });
-        return next;
-      });
+      const next = updater(configsRef.current);
+      configsRef.current = next;
+      setConfigs(next);
+
+      void saveAdminConfigs(next)
+        .then((persisted) => {
+          if (requestSeqRef.current !== seq) {
+            return;
+          }
+          const synced: ParkingConfigsSnapshot = {
+            ...configsRef.current,
+            updatedAt: persisted.updatedAt,
+            dataSource: persisted.dataSource,
+          };
+          configsRef.current = synced;
+          setConfigs(synced);
+          setSyncState("synced");
+        })
+        .catch((error: unknown) => {
+          if (requestSeqRef.current !== seq) {
+            return;
+          }
+          setSyncError(
+            error instanceof Error
+              ? error.message
+              : "Failed to save configuration",
+          );
+          setSyncState("error");
+        });
     },
     [],
   );

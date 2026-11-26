@@ -7,6 +7,7 @@ TOPIC_LIGHTING_STATUS = "parking/lighting/status"
 TOPIC_ENVIRONMENT_SENSOR = "parking/sensor/environment"
 
 TOPIC_LIGHTING_CONTROL = "parking/control/lighting"
+TOPIC_BARRIER_CONTROL = "parking/control/barrier"
 
 SUBSCRIBED_TOPICS: tuple[tuple[str, int], ...] = (
     (TOPIC_PARKING_STATUS, 0),

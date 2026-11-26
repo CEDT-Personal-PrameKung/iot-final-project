@@ -20,6 +20,7 @@ from src.database.models.parking import (
 )
 from src.features.parking.api_schemas import (
     ActivityReportsResponse,
+    BarrierCommandResponse,
     BarrierGateConfig,
     BarrierGateStateType,
     EnvironmentTelemetryResponse,
@@ -43,8 +44,9 @@ from src.features.parking.api_schemas import (
     VehicleDetectionResponse,
     VehicleType,
 )
-from src.mqtt.publisher import LightingCommand
+from src.mqtt.publisher import BarrierCommand, LightingCommand
 from src.mqtt.topics import (
+    TOPIC_BARRIER_CONTROL,
     TOPIC_ENTRANCE_SENSOR,
     TOPIC_ENVIRONMENT_SENSOR,
     TOPIC_LIGHTING_CONTROL,
@@ -71,6 +73,7 @@ DEFAULT_LIGHT_DEFINITIONS: tuple[tuple[str, str, str], ...] = (
 
 class MqttPublisherProtocol(Protocol):
     def publish_lighting_command(self, command: LightingCommand) -> None: ...
+    def publish_barrier_command(self, command: BarrierCommand) -> None: ...
 
 
 def _ensure_utc(value: datetime) -> datetime:
@@ -458,6 +461,66 @@ def apply_lighting_command(
     )
 
 
+def apply_barrier_command(
+    db: Session,
+    *,
+    command: BarrierCommand,
+    actor_email: str,
+    publisher: MqttPublisherProtocol,
+) -> BarrierCommandResponse:
+    """Publish an authorized barrier gate command over MQTT and persist state/audit log."""
+    publisher.publish_barrier_command(command)
+
+    now = datetime.now(UTC)
+    next_mode: LightingControlModeType = "auto" if command == "AUTO" else "manual"
+    gateway = db.scalar(
+        select(GatewayStatusRecord).order_by(desc(GatewayStatusRecord.updated_at)).limit(1)
+    )
+
+    if gateway is None:
+        next_state: BarrierGateStateType = "open" if command == "OPEN" else "closed"
+        gateway = GatewayStatusRecord(
+            gateway_id=DEFAULT_GATEWAY_ID,
+            barrier_state=next_state,
+            servo_target_angle=90.0 if next_state == "open" else 0.0,
+            updated_at=now,
+        )
+        db.add(gateway)
+    else:
+        if command == "OPEN":
+            gateway.barrier_state = "open"
+            gateway.servo_target_angle = 90.0
+        elif command == "CLOSE":
+            gateway.barrier_state = "closed"
+            gateway.servo_target_angle = 0.0
+        gateway.updated_at = now
+        next_state = _normalize_barrier_state(gateway.barrier_state)
+
+    summary = (
+        "Barrier gate switched to auto mode"
+        if command == "AUTO"
+        else f"Barrier gate {'opened' if command == 'OPEN' else 'closed'}"
+    )
+    db.add(
+        ParkingActivityEventRecord(
+            event_type="barrier",
+            device_id=gateway.gateway_id,
+            summary=summary,
+            detail=f"Command '{command}' sent by {actor_email}",
+            occurred_at=now,
+        )
+    )
+    db.commit()
+
+    return BarrierCommandResponse(
+        device_id=gateway.gateway_id,
+        command=command,
+        state=next_state,
+        mode=next_mode,
+        updated_at=now,
+    )
+
+
 def get_admin_configs(db: Session) -> ParkingConfigsResponse:
     """Build the admin configuration snapshot from stored configs and live device state."""
     now = datetime.now(UTC)
@@ -505,7 +568,7 @@ def get_admin_configs(db: Session) -> ParkingConfigsResponse:
         auto_close_enabled=bool(saved_barrier.get("autoCloseEnabled", saved_barrier.get("auto_close_enabled", True))),
         auto_close_delay_seconds=int(saved_barrier.get("autoCloseDelaySeconds", saved_barrier.get("auto_close_delay_seconds", 8))),
         ir_safety_beam_enabled=bool(saved_barrier.get("irSafetyBeamEnabled", saved_barrier.get("ir_safety_beam_enabled", True))),
-        topic=str(saved_barrier.get("topic") or "parking/actuator/command"),
+        topic=str(saved_barrier.get("topic") or TOPIC_BARRIER_CONTROL),
         last_operated_at=_ensure_utc(gateway.updated_at) if gateway is not None else now,
     )
 
@@ -540,6 +603,7 @@ def get_admin_configs(db: Session) -> ParkingConfigsResponse:
                     TOPIC_PARKING_STATUS,
                     TOPIC_VISION_DETECTION,
                     TOPIC_ENTRANCE_SENSOR,
+                    TOPIC_BARRIER_CONTROL,
                 ],
                 last_seen_at=gw_seen,
             )
@@ -604,6 +668,27 @@ def _derive_lighting_command_from_config_diff(
     return None
 
 
+def _derive_barrier_command_from_config_diff(
+    previous_config: dict[str, Any],
+    next_barrier: BarrierGateConfig,
+) -> BarrierCommand | None:
+    prev_barrier = previous_config.get("barrier")
+    if not isinstance(prev_barrier, dict):
+        prev_mode = None
+        prev_state = None
+    else:
+        prev_mode = prev_barrier.get("mode")
+        prev_state = prev_barrier.get("state")
+
+    if next_barrier.mode == "auto" and prev_mode != "auto":
+        return "AUTO"
+    if next_barrier.mode == "manual" and (
+        prev_mode != "manual" or prev_state != next_barrier.state
+    ):
+        return "OPEN" if next_barrier.state == "open" else "CLOSE"
+    return None
+
+
 def update_admin_configs(
     db: Session,
     payload: ParkingConfigsUpdateRequest,
@@ -611,15 +696,20 @@ def update_admin_configs(
     actor_email: str,
     publisher: MqttPublisherProtocol | None = None,
 ) -> ParkingConfigsResponse:
-    """Persist admin configuration changes and publish lighting commands when toggled."""
+    """Persist admin configuration changes and publish lighting/barrier commands when toggled."""
     now = datetime.now(UTC)
     previous_config = _load_saved_config_dict(db)
     lighting_command = _derive_lighting_command_from_config_diff(
         previous_config, payload.lighting
     )
+    barrier_command = _derive_barrier_command_from_config_diff(
+        previous_config, payload.barrier
+    )
 
     if lighting_command is not None and publisher is not None:
         publisher.publish_lighting_command(lighting_command)
+    if barrier_command is not None and publisher is not None:
+        publisher.publish_barrier_command(barrier_command)
 
     serialized = {
         "sensors": payload.sensors.model_dump(by_alias=True, mode="json"),
@@ -672,6 +762,35 @@ def update_admin_configs(
                     "Parking lights switched to auto mode"
                     if lighting_command == "AUTO"
                     else f"Parking lights turned {'on' if lighting_command == 'ON' else 'off'}"
+                ),
+                detail=f"Updated via admin configs by {actor_email}",
+                occurred_at=now,
+            )
+        )
+
+    if barrier_command is not None:
+        gateway = db.scalar(
+            select(GatewayStatusRecord)
+            .order_by(desc(GatewayStatusRecord.updated_at))
+            .limit(1)
+        )
+        if gateway is not None:
+            if barrier_command == "OPEN":
+                gateway.barrier_state = "open"
+                gateway.servo_target_angle = 90.0
+            elif barrier_command == "CLOSE":
+                gateway.barrier_state = "closed"
+                gateway.servo_target_angle = 0.0
+            gateway.updated_at = now
+
+        db.add(
+            ParkingActivityEventRecord(
+                event_type="barrier",
+                device_id=gateway.gateway_id if gateway is not None else DEFAULT_GATEWAY_ID,
+                summary=(
+                    "Barrier gate switched to auto mode"
+                    if barrier_command == "AUTO"
+                    else f"Barrier gate {'opened' if barrier_command == 'OPEN' else 'closed'}"
                 ),
                 detail=f"Updated via admin configs by {actor_email}",
                 occurred_at=now,

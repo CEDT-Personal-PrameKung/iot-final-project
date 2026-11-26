@@ -30,12 +30,18 @@ from src.main import app
 class FakePublisher:
     def __init__(self, *, should_fail: bool = False) -> None:
         self.commands: list[str] = []
+        self.barrier_commands: list[str] = []
         self.should_fail = should_fail
 
     def publish_lighting_command(self, command: str) -> None:
         if self.should_fail:
             raise RuntimeError("broker unreachable")
         self.commands.append(command)
+
+    def publish_barrier_command(self, command: str) -> None:
+        if self.should_fail:
+            raise RuntimeError("broker unreachable")
+        self.barrier_commands.append(command)
 
 
 def _create_sqlite_telemetry_engine():
@@ -319,6 +325,61 @@ class ParkingApiTests(unittest.TestCase):
         overview = self.client.get("/parking/overview").json()
         p2 = next(slot for slot in overview["slots"] if slot["id"] == "P2")
         self.assertEqual(p2["status"], "offline")
+
+        # Manual barrier gate toggle via PUT /configs publishes MQTT barrier command.
+        updated["barrier"]["mode"] = "manual"
+        updated["barrier"]["state"] = "closed"
+        put_gate = self.client.put(
+            "/configs",
+            json={
+                "sensors": updated["sensors"],
+                "lighting": updated["lighting"],
+                "barrier": updated["barrier"],
+                "bays": updated["bays"],
+            },
+        )
+        self.assertEqual(put_gate.status_code, 200)
+        self.assertEqual(put_gate.json()["barrier"]["state"], "closed")
+        self.assertEqual(self.publisher.barrier_commands[-1], "CLOSE")
+
+    def test_barrier_control_requires_admin_and_publishes_open_close_auto(self) -> None:
+        self.assertEqual(
+            self.client.post("/parking/barrier", json={"command": "OPEN"}).status_code,
+            401,
+        )
+
+        self._as_user(UserRole.GUEST)
+        self.assertEqual(
+            self.client.post("/parking/barrier", json={"command": "OPEN"}).status_code,
+            403,
+        )
+
+        self._as_user(UserRole.ADMIN)
+        res_close = self.client.post("/parking/barrier", json={"state": "closed"})
+        self.assertEqual(res_close.status_code, 200)
+        self.assertEqual(res_close.json()["command"], "CLOSE")
+        self.assertEqual(res_close.json()["state"], "closed")
+        self.assertEqual(res_close.json()["mode"], "manual")
+
+        res_open = self.client.post("/parking/barrier", json={"command": "OPEN"})
+        self.assertEqual(res_open.status_code, 200)
+        self.assertEqual(res_open.json()["state"], "open")
+
+        res_auto = self.client.post("/parking/barrier", json={"command": "AUTO"})
+        self.assertEqual(res_auto.status_code, 200)
+        self.assertEqual(res_auto.json()["mode"], "auto")
+
+        self.assertEqual(self.publisher.barrier_commands, ["CLOSE", "OPEN", "AUTO"])
+        self.assertEqual(
+            self.client.post("/parking/barrier", json={}).status_code,
+            422,
+        )
+
+        self.publisher.should_fail = True
+        self.assertEqual(
+            self.client.post("/parking/barrier", json={"command": "OPEN"}).status_code,
+            503,
+        )
 
 
 if __name__ == "__main__":

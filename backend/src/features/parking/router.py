@@ -12,6 +12,8 @@ from src.database import User, get_db
 from src.database.telemetry import get_telemetry_engine
 from src.features.parking.api_schemas import (
     ActivityReportsResponse,
+    BarrierCommandRequest,
+    BarrierCommandResponse,
     LightingCommandRequest,
     LightingCommandResponse,
     ParkingConfigsResponse,
@@ -21,6 +23,7 @@ from src.features.parking.api_schemas import (
 from src.features.parking.service import (
     EngineGetter,
     MqttPublisherProtocol,
+    apply_barrier_command,
     apply_lighting_command,
     get_admin_configs,
     get_activity_reports,
@@ -128,6 +131,34 @@ def control_parking_lighting(
     return result
 
 
+@parking_router.post(
+    "/barrier",
+    response_model=BarrierCommandResponse,
+    summary="Send an authorized OPEN, CLOSE, or AUTO command to the barrier gate",
+)
+def control_parking_barrier(
+    request: BarrierCommandRequest,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    publisher: MqttPublisherProtocol = Depends(get_mqtt_publisher),
+) -> BarrierCommandResponse:
+    try:
+        result = apply_barrier_command(
+            db,
+            command=request.resolved_command(),
+            actor_email=admin.email,
+            publisher=publisher,
+        )
+    except RuntimeError as error:
+        logger.exception("Failed to publish barrier command to EMQX Cloud")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to deliver barrier command to MQTT broker",
+        ) from error
+    notify_parking_state_changed()
+    return result
+
+
 @reports_router.get(
     "/activity",
     response_model=ActivityReportsResponse,
@@ -182,7 +213,7 @@ def save_admin_configs(
             publisher=publisher,
         )
     except RuntimeError as error:
-        logger.exception("Failed to publish lighting config update to EMQX Cloud")
+        logger.exception("Failed to publish actuator config update to EMQX Cloud")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to deliver actuator update to MQTT broker",
