@@ -154,10 +154,14 @@ function escapeCsvCell(value: string): string {
 
 interface ReportsDashboardProps {
   initialSnapshot: ActivityReportsSnapshot;
+  wsUrl?: string;
 }
 
-export function ReportsDashboard({ initialSnapshot }: ReportsDashboardProps) {
-  const wsUrl = process.env.NEXT_PUBLIC_PARKING_WS_URL;
+export function ReportsDashboard({
+  initialSnapshot,
+  wsUrl: serverWsUrl,
+}: ReportsDashboardProps) {
+  const wsUrl = serverWsUrl || process.env.NEXT_PUBLIC_PARKING_WS_URL;
   const [logs, setLogs] = useState<ParkingActivityEvent[]>(initialSnapshot.logs);
   const [dataSource, setDataSource] = useState(initialSnapshot.dataSource);
   const [isRefreshing, setIsRefreshing] = useState(false);

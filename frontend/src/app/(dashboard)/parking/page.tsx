@@ -3,6 +3,7 @@ import { Suspense } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { ParkingDashboard } from "@/features/parking/parking-dashboard";
+import { getPublicParkingWsUrl } from "@/lib/api/backend";
 import { getParkingOverview } from "@/lib/api/parking";
 
 export const metadata: Metadata = {
@@ -21,7 +22,8 @@ export default function ParkingPage() {
 
 async function ParkingPageContent() {
   const snapshot = await getParkingOverview();
-  return <ParkingDashboard initialSnapshot={snapshot} />;
+  const wsUrl = getPublicParkingWsUrl();
+  return <ParkingDashboard initialSnapshot={snapshot} wsUrl={wsUrl} />;
 }
 
 function ParkingDashboardSkeleton() {

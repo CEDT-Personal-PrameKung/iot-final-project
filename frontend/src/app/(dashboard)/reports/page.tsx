@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getSessionUser } from "@/features/auth/session";
 import { ReportsDashboard } from "@/features/reports/reports-dashboard";
+import { getPublicParkingWsUrl } from "@/lib/api/backend";
 import { getActivityReports } from "@/lib/api/reports";
 
 export const metadata: Metadata = {
@@ -33,7 +34,8 @@ async function AdminReportsPage() {
   }
 
   const snapshot = await getActivityReports();
-  return <ReportsDashboard initialSnapshot={snapshot} />;
+  const wsUrl = getPublicParkingWsUrl();
+  return <ReportsDashboard initialSnapshot={snapshot} wsUrl={wsUrl} />;
 }
 
 function ReportsPageSkeleton() {

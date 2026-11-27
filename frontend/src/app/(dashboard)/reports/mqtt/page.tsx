@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getSessionUser } from "@/features/auth/session";
 import { MqttMonitorDashboard } from "@/features/reports/mqtt-monitor-dashboard";
+import { getPublicMqttWsUrl } from "@/lib/api/backend";
 
 export const metadata: Metadata = {
   title: "MQTT Monitor",
@@ -31,7 +32,8 @@ async function AdminMqttMonitorPage() {
     redirect("/parking");
   }
 
-  return <MqttMonitorDashboard adminEmail={sessionUser.email} />;
+  const wsUrl = getPublicMqttWsUrl();
+  return <MqttMonitorDashboard adminEmail={sessionUser.email} wsUrl={wsUrl} />;
 }
 
 function MqttMonitorSkeleton() {

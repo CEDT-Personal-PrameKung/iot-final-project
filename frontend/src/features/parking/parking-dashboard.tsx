@@ -85,10 +85,14 @@ function useCurrentTime(): number | null {
 
 interface ParkingDashboardProps {
   initialSnapshot: ParkingOverviewSnapshot;
+  wsUrl?: string;
 }
 
-export function ParkingDashboard({ initialSnapshot }: ParkingDashboardProps) {
-  const wsUrl = process.env.NEXT_PUBLIC_PARKING_WS_URL;
+export function ParkingDashboard({
+  initialSnapshot,
+  wsUrl: serverWsUrl,
+}: ParkingDashboardProps) {
+  const wsUrl = serverWsUrl || process.env.NEXT_PUBLIC_PARKING_WS_URL;
   const {
     snapshot,
     streamStatus,

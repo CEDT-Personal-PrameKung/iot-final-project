@@ -110,12 +110,17 @@ function formatPayloadForDisplay(raw: string): { text: string; isJson: boolean }
 
 interface MqttMonitorDashboardProps {
   adminEmail: string;
+  wsUrl?: string;
 }
 
 export function MqttMonitorDashboard({
   adminEmail,
+  wsUrl: serverWsUrl,
 }: MqttMonitorDashboardProps) {
-  const wsBaseUrl = useMemo(() => resolveMqttWsBaseUrl(), []);
+  const wsBaseUrl = useMemo(
+    () => serverWsUrl?.trim() || resolveMqttWsBaseUrl(),
+    [serverWsUrl],
+  );
 
   const [streamState, setStreamState] = useState<StreamState>(
     wsBaseUrl ? "connecting" : "error",
@@ -123,7 +128,7 @@ export function MqttMonitorDashboard({
   const [streamError, setStreamError] = useState<string | null>(
     wsBaseUrl
       ? null
-      : "NEXT_PUBLIC_PARKING_WS_URL is not configured in frontend/.env",
+      : "WebSocket URL is not configured (set NEXT_PUBLIC_PARKING_WS_URL or BACKEND_API_URL in environment variables)",
   );
   const [brokerStatus, setBrokerStatus] = useState<MqttBrokerStatus>({
     brokerConnected: false,

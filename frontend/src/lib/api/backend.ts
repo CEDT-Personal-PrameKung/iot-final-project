@@ -5,7 +5,52 @@ import { cookies } from "next/headers";
 export const SESSION_COOKIE_NAME = "smart_parking_access_token";
 
 export function getBackendApiUrl(): string {
-  return process.env.BACKEND_API_URL ?? "http://localhost:8000";
+  return process.env.BACKEND_API_URL?.trim() || "http://localhost:8000";
+}
+
+function deriveWsUrlFromBackend(pathname: string): string | undefined {
+  const backendUrl = process.env.BACKEND_API_URL?.trim();
+  if (!backendUrl) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(backendUrl);
+    parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+    parsed.pathname = pathname;
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+export function getPublicParkingWsUrl(): string | undefined {
+  const explicit = process.env.NEXT_PUBLIC_PARKING_WS_URL?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  return deriveWsUrlFromBackend("/ws/parking");
+}
+
+export function getPublicMqttWsUrl(): string | undefined {
+  const explicit = process.env.NEXT_PUBLIC_MQTT_WS_URL?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  const parkingWs = process.env.NEXT_PUBLIC_PARKING_WS_URL?.trim();
+  if (parkingWs) {
+    try {
+      const parsed = new URL(parkingWs);
+      parsed.pathname = "/ws/mqtt";
+      parsed.search = "";
+      parsed.hash = "";
+      return parsed.toString();
+    } catch {
+      // Fall back to deriving from BACKEND_API_URL.
+    }
+  }
+  return deriveWsUrlFromBackend("/ws/mqtt");
 }
 
 export async function getBackendAuthHeaders(): Promise<Record<string, string>> {
