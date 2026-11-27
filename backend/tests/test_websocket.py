@@ -226,6 +226,7 @@ class WebSocketEndpointTests(unittest.TestCase):
 
         with (
             patch("src.websocket.router.load_live_parking_snapshot", side_effect=fake_loader),
+            patch("src.main.start_embedded_mqtt_subscriber", return_value=None),
             patch.object(
                 app.state,
                 "__dict__",

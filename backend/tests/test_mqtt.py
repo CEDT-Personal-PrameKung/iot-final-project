@@ -276,6 +276,37 @@ class MqttSubscriberTests(unittest.TestCase):
         )
         mock_record.assert_not_called()
 
+    @patch("src.main.notify_parking_state_changed")
+    @patch("src.main.build_default_subscriber")
+    def test_embedded_mqtt_subscriber_starts_with_unique_client_id_and_skips_when_disabled(
+        self,
+        mock_build: MagicMock,
+        mock_notify: MagicMock,
+    ) -> None:
+        from src.main import start_embedded_mqtt_subscriber
+
+        fake_subscriber = MagicMock()
+        mock_build.return_value = fake_subscriber
+
+        started = start_embedded_mqtt_subscriber(make_settings())
+        self.assertIs(started, fake_subscriber)
+        fake_subscriber.start.assert_called_once()
+        kwargs = mock_build.call_args.kwargs
+        self.assertTrue(kwargs["client_id"].startswith("smart-parking-backend-api-"))
+        kwargs["on_persisted"]("entrance_queue", object())
+        mock_notify.assert_called_once()
+
+        # Disabled via flag
+        self.assertIsNone(
+            start_embedded_mqtt_subscriber(
+                make_settings(enable_embedded_mqtt_worker=False)
+            )
+        )
+        # Missing EMQX credentials
+        self.assertIsNone(
+            start_embedded_mqtt_subscriber(make_settings(emqx_host=None))
+        )
+
 
 class MqttPublisherTests(unittest.TestCase):
     def setUp(self) -> None:

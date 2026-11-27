@@ -62,7 +62,10 @@ class MqttMonitorTests(unittest.TestCase):
         self.assertIn(TOPIC_BARRIER_CONTROL, body["topics"])
 
     def test_ws_mqtt_rejects_missing_or_invalid_token(self) -> None:
-        with TestClient(app) as client:
+        with (
+            patch("src.main.start_embedded_mqtt_subscriber", return_value=None),
+            TestClient(app) as client,
+        ):
             with self.assertRaises(WebSocketDisconnect) as missing_ctx:
                 with client.websocket_connect("/ws/mqtt"):
                     pass
@@ -108,6 +111,7 @@ class MqttMonitorTests(unittest.TestCase):
                 return_value=admin,
             ),
             patch("src.websocket.mqtt_monitor.mqtt_monitor_bridge", test_bridge),
+            patch("src.main.start_embedded_mqtt_subscriber", return_value=None),
         ):
             with TestClient(app) as client:
                 with client.websocket_connect("/ws/mqtt?token=valid-admin") as ws:

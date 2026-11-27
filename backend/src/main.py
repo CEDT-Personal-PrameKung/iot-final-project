@@ -1,5 +1,7 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from fastapi import FastAPI, responses
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,14 +14,18 @@ from src.features.parking.router import (
     reports_router,
 )
 from src.features.users.router import router as users_router
+from src.mqtt.subscriber import MqttSubscriber, build_default_subscriber
 from src.services.keepalive import KeepAliveScheduler
-from src.settings import get_settings
+from src.settings import Settings, get_settings
 from src.websocket import (
     mqtt_monitor_bridge,
     mqtt_monitor_router,
+    notify_parking_state_changed,
     parking_broadcaster,
     router as websocket_router,
 )
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 cors_origins = [
@@ -33,13 +39,44 @@ if not cors_origins and settings.app_env == "development":
 keepalive_scheduler = KeepAliveScheduler()
 
 
+def start_embedded_mqtt_subscriber(
+    resolved_settings: Settings | None = None,
+) -> MqttSubscriber | None:
+    """Start the EMQX telemetry subscriber inside the API process when configured."""
+    active = resolved_settings or get_settings()
+    if not active.enable_embedded_mqtt_worker:
+        logger.info("Embedded MQTT worker disabled via ENABLE_EMBEDDED_MQTT_WORKER=false")
+        return None
+    if not (active.emqx_host and active.emqx_username and active.emqx_password):
+        logger.info("EMQX credentials not configured; skipping embedded MQTT subscriber")
+        return None
+
+    client_prefix = active.emqx_client_id.strip() or "smart-parking-backend"
+    unique_client_id = f"{client_prefix}-api-{uuid4().hex[:8]}"
+    subscriber = build_default_subscriber(
+        active,
+        client_id=unique_client_id,
+        on_persisted=lambda _kind, _data: notify_parking_state_changed(),
+    )
+    subscriber.start()
+    logger.info("Started embedded MQTT subscriber (client_id=%s)", unique_client_id)
+    return subscriber
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await parking_broadcaster.start()
     await keepalive_scheduler.start()
+    embedded_subscriber: MqttSubscriber | None = None
+    try:
+        embedded_subscriber = start_embedded_mqtt_subscriber()
+    except Exception:
+        logger.exception("Failed to start embedded MQTT subscriber")
     try:
         yield
     finally:
+        if embedded_subscriber is not None:
+            embedded_subscriber.stop()
         await keepalive_scheduler.stop()
         await mqtt_monitor_bridge.shutdown()
         await parking_broadcaster.stop()

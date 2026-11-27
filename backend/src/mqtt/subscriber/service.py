@@ -197,6 +197,8 @@ def build_default_subscriber(
     *,
     store: ParkingTelemetryStore | None = None,
     persistence: ParkingPersistenceService | None = None,
+    client_id: str | None = None,
+    on_persisted: Callable[[str, Any], None] | None = None,
 ) -> MqttSubscriber:
     """Create the default backend subscriber wired to all parking and sensor handlers."""
     resolved = settings or get_settings()
@@ -214,10 +216,18 @@ def build_default_subscriber(
                 get_telemetry_engine if resolved.telemetry_database_url else None
             ),
         )
-        telemetry_store = ParkingTelemetryStore(
-            on_update=resolved_persistence.handle_telemetry_update
-        )
-    subscriber = MqttSubscriber(config=config, subscriptions=SUBSCRIBED_TOPICS)
+
+        def handle_update(kind: str, data: Any) -> None:
+            resolved_persistence.handle_telemetry_update(kind, data)
+            if on_persisted is not None:
+                on_persisted(kind, data)
+
+        telemetry_store = ParkingTelemetryStore(on_update=handle_update)
+    subscriber = MqttSubscriber(
+        config=config,
+        subscriptions=SUBSCRIBED_TOPICS,
+        client_id=client_id,
+    )
 
     telemetry_warned = False
 
@@ -232,6 +242,8 @@ def build_default_subscriber(
                 telemetry_warned = True
             return
         record_environment_reading(payload)
+        if on_persisted is not None:
+            on_persisted("environment_reading", payload)
 
     subscriber.register_handler(
         TOPIC_PARKING_STATUS, telemetry_store.handle_parking_status
