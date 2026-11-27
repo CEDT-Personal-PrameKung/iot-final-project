@@ -74,7 +74,9 @@ class ParkingChangeBroadcaster:
         if self._task is not None and not self._task.done():
             return
         self._loop = asyncio.get_running_loop()
-        self._stop_event.clear()
+        self._stop_event = asyncio.Event()
+        self._wakeup_event = asyncio.Event()
+        self._last_snapshot = None
         self._task = asyncio.create_task(self._run(), name="parking-ws-broadcaster")
 
     async def stop(self) -> None:

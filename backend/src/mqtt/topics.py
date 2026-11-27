@@ -16,3 +16,13 @@ SUBSCRIBED_TOPICS: tuple[tuple[str, int], ...] = (
     (TOPIC_LIGHTING_STATUS, 0),
     (TOPIC_ENVIRONMENT_SENSOR, 0),
 )
+
+MONITOR_TOPICS: tuple[tuple[str, int], ...] = (
+    *SUBSCRIBED_TOPICS,
+    (TOPIC_LIGHTING_CONTROL, 1),
+    (TOPIC_BARRIER_CONTROL, 1),
+)
+
+CONTROL_TOPICS: frozenset[str] = frozenset(
+    {TOPIC_LIGHTING_CONTROL, TOPIC_BARRIER_CONTROL}
+)

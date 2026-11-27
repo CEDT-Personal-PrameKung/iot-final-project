@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -7,6 +8,7 @@ import {
   ArrowUpRight,
   Download,
   Lightbulb,
+  Radio,
   RefreshCw,
   Search,
   Wifi,
@@ -367,7 +369,14 @@ export function ReportsDashboard({ initialSnapshot }: ReportsDashboardProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/reports/mqtt"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Radio aria-hidden="true" className="size-4" />
+            MQTT Monitor
+          </Link>
           <Button
             type="button"
             variant="outline"

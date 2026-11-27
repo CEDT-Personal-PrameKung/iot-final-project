@@ -88,8 +88,19 @@ class ParkingWebSocketManager:
 
     def __init__(self) -> None:
         self._connections: set[WebSocket] = set()
-        self._lock = asyncio.Lock()
-        self._has_clients = asyncio.Event()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._lock: asyncio.Lock | None = None
+        self._has_clients: asyncio.Event | None = None
+
+    def _ensure_loop_primitives(self) -> tuple[asyncio.Lock, asyncio.Event]:
+        loop = asyncio.get_running_loop()
+        if self._loop is not loop or self._lock is None or self._has_clients is None:
+            self._loop = loop
+            self._lock = asyncio.Lock()
+            self._has_clients = asyncio.Event()
+            if self._connections:
+                self._has_clients.set()
+        return self._lock, self._has_clients
 
     @property
     def connection_count(self) -> int:
@@ -97,7 +108,8 @@ class ParkingWebSocketManager:
 
     async def wait_for_clients(self) -> None:
         """Suspend until at least one WebSocket client is connected."""
-        await self._has_clients.wait()
+        _, has_clients = self._ensure_loop_primitives()
+        await has_clients.wait()
 
     async def connect(
         self,
@@ -111,24 +123,27 @@ class ParkingWebSocketManager:
             await websocket.send_text(
                 json.dumps(build_ws_message("snapshot", initial_snapshot))
             )
-        async with self._lock:
+        lock, has_clients = self._ensure_loop_primitives()
+        async with lock:
             self._connections.add(websocket)
-            self._has_clients.set()
+            has_clients.set()
             count = len(self._connections)
         logger.info("Parking WebSocket client connected (active=%d)", count)
 
     async def disconnect(self, websocket: WebSocket) -> None:
         """Remove a disconnected client from the active registry."""
-        async with self._lock:
+        lock, has_clients = self._ensure_loop_primitives()
+        async with lock:
             self._connections.discard(websocket)
             count = len(self._connections)
             if count == 0:
-                self._has_clients.clear()
+                has_clients.clear()
         logger.info("Parking WebSocket client disconnected (active=%d)", count)
 
     async def broadcast_raw(self, message: dict[str, Any]) -> int:
         """Serialize a message envelope once and send it to all active clients."""
-        async with self._lock:
+        lock, has_clients = self._ensure_loop_primitives()
+        async with lock:
             targets = list(self._connections)
         if not targets:
             return 0
@@ -144,11 +159,11 @@ class ParkingWebSocketManager:
                 stale.append(socket)
 
         if stale:
-            async with self._lock:
+            async with lock:
                 for socket in stale:
                     self._connections.discard(socket)
                 if not self._connections:
-                    self._has_clients.clear()
+                    has_clients.clear()
         return sent
 
     async def broadcast_event(self, event_type: str, payload: Any) -> int:

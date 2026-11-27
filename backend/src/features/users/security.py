@@ -41,6 +41,39 @@ def create_access_token(user_id: UUID) -> str:
     return jwt.encode(payload, get_signing_secret(), algorithm=ALGORITHM)
 
 
+def create_mqtt_monitor_token(user_id: UUID, *, ttl_seconds: int = 60) -> str:
+    """Create a short-lived single-purpose token for authenticating WS /ws/mqtt."""
+    now = datetime.now(UTC)
+    payload = {
+        "sub": str(user_id),
+        "iat": now,
+        "exp": now + timedelta(seconds=ttl_seconds),
+        "type": "mqtt_ws",
+    }
+    return jwt.encode(payload, get_signing_secret(), algorithm=ALGORITHM)
+
+
+def verify_mqtt_monitor_token(token: str, db: Session) -> User | None:
+    """Validate a short-lived WS token and verify the user is an active admin."""
+    try:
+        payload = jwt.decode(
+            token,
+            get_signing_secret(),
+            algorithms=[ALGORITHM],
+            options={"require": ["sub", "iat", "exp"]},
+        )
+        if payload.get("type") != "mqtt_ws":
+            return None
+        user_id = UUID(payload["sub"])
+    except (RuntimeError, jwt.InvalidTokenError, ValueError, TypeError, KeyError):
+        return None
+
+    user = db.scalar(select(User).where(User.id == user_id, User.is_active.is_(True)))
+    if user is None or user.role != UserRole.ADMIN:
+        return None
+    return user
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
