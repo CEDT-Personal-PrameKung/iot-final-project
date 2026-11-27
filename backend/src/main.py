@@ -12,6 +12,7 @@ from src.features.parking.router import (
     reports_router,
 )
 from src.features.users.router import router as users_router
+from src.services.keepalive import KeepAliveScheduler
 from src.settings import get_settings
 from src.websocket import (
     mqtt_monitor_bridge,
@@ -29,13 +30,17 @@ cors_origins = [
 if not cors_origins and settings.app_env == "development":
     cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+keepalive_scheduler = KeepAliveScheduler()
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await parking_broadcaster.start()
+    await keepalive_scheduler.start()
     try:
         yield
     finally:
+        await keepalive_scheduler.stop()
         await mqtt_monitor_bridge.shutdown()
         await parking_broadcaster.stop()
         close_shared_mqtt_publisher()

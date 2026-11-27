@@ -14,6 +14,12 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+@router.get("/health/ping", tags=["health"])
+def health_ping() -> JSONResponse:
+    """Lightweight liveness endpoint for keep-alive pings without waking Neon or Tiger Cloud."""
+    return JSONResponse(content={"status": "ok"})
+
+
 @router.get("/health", tags=["health"])
 @router.get("/health/neon", tags=["health"])
 def health_check() -> JSONResponse:
