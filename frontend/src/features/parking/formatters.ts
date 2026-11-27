@@ -1,4 +1,5 @@
 import type {
+  EntranceQueueStatus,
   LightCondition,
   ParkingSlot,
   ParkingSlotStatus,
@@ -105,6 +106,11 @@ export const LIGHT_CONDITION_LABEL: Record<LightCondition, string> = {
   moderate: "Moderate",
   dim: "Dim",
   dark: "Dark",
+};
+
+export const ENTRANCE_QUEUE_STATUS_LABEL: Record<EntranceQueueStatus, string> = {
+  NO_VEHICLE: "No Vehicle",
+  IN_QUEUE: "In Queue",
 };
 
 export const STREAM_STATUS_LABEL: Record<ParkingStreamStatus, string> = {

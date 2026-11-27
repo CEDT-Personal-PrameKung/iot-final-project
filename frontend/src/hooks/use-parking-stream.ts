@@ -8,6 +8,7 @@ import {
 } from "@/features/parking/formatters";
 import { setParkingLightState } from "@/lib/api/parking";
 import type {
+  EntranceQueue,
   OccupancyTrendPoint,
   ParkingActivityEvent,
   ParkingOverviewSnapshot,
@@ -17,6 +18,12 @@ import type {
   ParkingWebSocketEvent,
   VehicleType,
 } from "@/types/parking";
+
+const DEFAULT_ENTRANCE_QUEUE: EntranceQueue = {
+  status: "NO_VEHICLE",
+  distance: null,
+  timestamp: null,
+};
 
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const BASE_RECONNECT_DELAY_MS = 1_500;
@@ -197,6 +204,7 @@ function parseParkingEvent(raw: string): ParkingWebSocketEvent | null {
       parsed.type === "slot_status" ||
       parsed.type === "environment_update" ||
       parsed.type === "lighting_status" ||
+      parsed.type === "entrance_queue" ||
       parsed.type === "activity_event"
     ) {
       return parsed as ParkingWebSocketEvent;
@@ -216,6 +224,7 @@ function applyParkingEvent(
     case "snapshot":
       return {
         ...event.payload,
+        entranceQueue: event.payload.entranceQueue ?? DEFAULT_ENTRANCE_QUEUE,
         recentActivity: event.payload.recentActivity.slice(
           0,
           MAX_ACTIVITY_EVENTS,
@@ -265,6 +274,13 @@ function applyParkingEvent(
         updatedAt: event.payload[0]?.updatedAt ?? current.updatedAt,
         dataSource: "live",
       };
+    case "entrance_queue":
+      return {
+        ...current,
+        entranceQueue: event.payload,
+        updatedAt: event.payload.timestamp ?? current.updatedAt,
+        dataSource: "live",
+      };
     case "activity_event":
       return {
         ...current,
@@ -286,6 +302,7 @@ export function useParkingStream({
 }: UseParkingStreamOptions) {
   const [snapshot, setSnapshot] = useState<ParkingOverviewSnapshot>(() => ({
     ...initialSnapshot,
+    entranceQueue: initialSnapshot.entranceQueue ?? DEFAULT_ENTRANCE_QUEUE,
     recentActivity: initialSnapshot.recentActivity.slice(
       0,
       MAX_ACTIVITY_EVENTS,

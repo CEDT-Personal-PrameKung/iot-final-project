@@ -43,6 +43,14 @@ export interface ParkingLight {
   updatedAt: string;
 }
 
+export type EntranceQueueStatus = "NO_VEHICLE" | "IN_QUEUE";
+
+export interface EntranceQueue {
+  status: EntranceQueueStatus;
+  distance: number | null;
+  timestamp: string | null;
+}
+
 export type ParkingDataSource = "mock" | "live";
 
 export interface OccupancyTrendPoint {
@@ -73,6 +81,7 @@ export interface ParkingOverviewSnapshot {
   slots: ParkingSlot[];
   environment: EnvironmentTelemetry;
   lights: ParkingLight[];
+  entranceQueue: EntranceQueue;
   occupancyHistory: OccupancyTrendPoint[];
   recentActivity: ParkingActivityEvent[];
   updatedAt: string;
@@ -91,4 +100,5 @@ export type ParkingWebSocketEvent =
   | { type: "slot_status"; payload: ParkingSlot }
   | { type: "environment_update"; payload: EnvironmentTelemetry }
   | { type: "lighting_status"; payload: ParkingLight[] }
+  | { type: "entrance_queue"; payload: EntranceQueue }
   | { type: "activity_event"; payload: ParkingActivityEvent };

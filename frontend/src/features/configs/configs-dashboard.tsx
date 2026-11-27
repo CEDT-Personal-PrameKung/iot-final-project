@@ -26,15 +26,31 @@ import {
 } from "@/features/configs/configs-lot-map";
 import { LightingConfigsCard } from "@/features/configs/lighting-configs-card";
 import { SensorThresholdsCard } from "@/features/configs/sensor-thresholds-card";
-import { formatTelemetryTime } from "@/features/parking/formatters";
+import {
+  STREAM_STATUS_LABEL,
+  formatTelemetryTime,
+} from "@/features/parking/formatters";
 import { ParkingSummary } from "@/features/parking/parking-summary";
+import { useParkingStream } from "@/hooks/use-parking-stream";
 import { saveAdminConfigs } from "@/lib/api/configs";
 import { cn } from "@/lib/utils";
 import type {
   ManagedBayConfig,
   ParkingConfigsSnapshot,
 } from "@/types/configs";
-import type { ParkingOverviewSnapshot, ParkingSlot } from "@/types/parking";
+import type {
+  ParkingOverviewSnapshot,
+  ParkingSlot,
+  ParkingStreamStatus,
+} from "@/types/parking";
+
+const streamDotStyles: Record<ParkingStreamStatus, string> = {
+  connected: "bg-status-available",
+  connecting: "bg-status-warning",
+  reconnecting: "bg-status-warning",
+  mock: "bg-status-warning",
+  disconnected: "bg-status-occupied",
+};
 
 type BarrierCommandChoice = "auto" | "open" | "closed";
 
@@ -42,13 +58,22 @@ interface ConfigsDashboardProps {
   initialConfigs: ParkingConfigsSnapshot;
   initialParking: ParkingOverviewSnapshot;
   adminEmail: string;
+  wsUrl?: string;
 }
 
 export function ConfigsDashboard({
   initialConfigs,
   initialParking,
   adminEmail,
+  wsUrl: serverWsUrl,
 }: ConfigsDashboardProps) {
+  const wsUrl = serverWsUrl || process.env.NEXT_PUBLIC_PARKING_WS_URL;
+  const { snapshot: parking, streamStatus } = useParkingStream({
+    initialSnapshot: initialParking,
+    wsUrl,
+  });
+  const isMockStream = streamStatus === "mock";
+
   const [configs, setConfigs] =
     useState<ParkingConfigsSnapshot>(initialConfigs);
   const configsRef = useRef<ParkingConfigsSnapshot>(initialConfigs);
@@ -62,11 +87,11 @@ export function ConfigsDashboard({
 
   const slotById = useMemo(() => {
     const map: Record<string, ParkingSlot> = {};
-    for (const slot of initialParking.slots) {
+    for (const slot of parking.slots) {
       map[slot.id] = slot;
     }
     return map;
-  }, [initialParking.slots]);
+  }, [parking.slots]);
 
   const selectedBay = useMemo(
     () => configs.bays.find((bay) => bay.id === selectedBayId) ?? null,
@@ -186,39 +211,56 @@ export function ConfigsDashboard({
           </p>
         </div>
 
-        <Badge
-          variant="outline"
-          role="status"
-          title={syncError ?? undefined}
-          className={cn(
-            "gap-1.5 tabular-nums",
-            syncState === "synced" &&
-              "border-transparent bg-status-available-muted text-status-available",
-            syncState === "error" &&
-              "border-transparent bg-status-occupied-muted text-status-occupied",
+        <div className="flex flex-wrap items-center gap-2">
+          {!isMockStream && (
+            <Badge variant="outline" className="gap-1.5">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-2 rounded-full",
+                  streamDotStyles[streamStatus],
+                )}
+              />
+              {STREAM_STATUS_LABEL[streamStatus]}
+            </Badge>
           )}
-        >
-          {syncState === "syncing" ? (
-            <>
-              <Loader2 aria-hidden="true" className="size-3 animate-spin" />
-              Applying live…
-            </>
-          ) : syncState === "error" ? (
-            <>
-              <AlertCircle aria-hidden="true" className="size-3" />
-              {syncError ?? "Sync failed"}
-            </>
-          ) : (
-            <>
-              <CheckCircle2 aria-hidden="true" className="size-3" />
-              Auto-applied · {formatTelemetryTime(configs.updatedAt)}
-            </>
-          )}
-        </Badge>
+          <Badge
+            variant="outline"
+            role="status"
+            title={syncError ?? undefined}
+            className={cn(
+              "gap-1.5 tabular-nums",
+              syncState === "synced" &&
+                "border-transparent bg-status-available-muted text-status-available",
+              syncState === "error" &&
+                "border-transparent bg-status-occupied-muted text-status-occupied",
+            )}
+          >
+            {syncState === "syncing" ? (
+              <>
+                <Loader2 aria-hidden="true" className="size-3 animate-spin" />
+                Applying live…
+              </>
+            ) : syncState === "error" ? (
+              <>
+                <AlertCircle aria-hidden="true" className="size-3" />
+                {syncError ?? "Sync failed"}
+              </>
+            ) : (
+              <>
+                <CheckCircle2 aria-hidden="true" className="size-3" />
+                Auto-applied · {formatTelemetryTime(configs.updatedAt)}
+              </>
+            )}
+          </Badge>
+        </div>
       </div>
 
-      {/* Same horizontal Environment Telemetry strip as /parking */}
-      <ParkingSummary environment={initialParking.environment} />
+      {/* Same horizontal Queue & Environment Telemetry strip as /parking */}
+      <ParkingSummary
+        environment={parking.environment}
+        entranceQueue={parking.entranceQueue}
+      />
 
       {/* Easy-access Quick Barrier Control Bar (Auto / Open / Close) */}
       <Card size="sm">

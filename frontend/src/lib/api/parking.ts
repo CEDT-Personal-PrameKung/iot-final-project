@@ -2,7 +2,13 @@
 
 import { MOCK_PARKING_SNAPSHOT } from "@/features/parking/mock-data";
 import { fetchBackendJson } from "@/lib/api/backend";
-import type { ParkingOverviewSnapshot } from "@/types/parking";
+import type { EntranceQueue, ParkingOverviewSnapshot } from "@/types/parking";
+
+const DEFAULT_ENTRANCE_QUEUE: EntranceQueue = {
+  status: "NO_VEHICLE",
+  distance: null,
+  timestamp: null,
+};
 
 export type LightingCommand = "ON" | "OFF" | "AUTO";
 
@@ -22,11 +28,16 @@ export interface SetParkingLightResult {
  */
 export async function getParkingOverview(): Promise<ParkingOverviewSnapshot> {
   try {
-    const result = await fetchBackendJson<ParkingOverviewSnapshot>(
-      "/parking/overview",
-    );
+    const result = await fetchBackendJson<
+      Omit<ParkingOverviewSnapshot, "entranceQueue"> & {
+        entranceQueue?: EntranceQueue;
+      }
+    >("/parking/overview");
     if (result.ok) {
-      return result.data;
+      return {
+        ...result.data,
+        entranceQueue: result.data.entranceQueue ?? DEFAULT_ENTRANCE_QUEUE,
+      };
     }
   } catch {
     // Fall back to mock data when the backend is unavailable.

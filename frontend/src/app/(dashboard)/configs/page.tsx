@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getSessionUser } from "@/features/auth/session";
 import { ConfigsDashboard } from "@/features/configs/configs-dashboard";
+import { getPublicParkingWsUrl } from "@/lib/api/backend";
 import { getAdminConfigs } from "@/lib/api/configs";
 import { getParkingOverview } from "@/lib/api/parking";
 
@@ -37,12 +38,14 @@ async function AdminConfigsPage() {
     getAdminConfigs(),
     getParkingOverview(),
   ]);
+  const wsUrl = getPublicParkingWsUrl();
 
   return (
     <ConfigsDashboard
       initialConfigs={configs}
       initialParking={parking}
       adminEmail={sessionUser.email}
+      wsUrl={wsUrl}
     />
   );
 }
@@ -57,7 +60,8 @@ function ConfigsPageSkeleton() {
         <Skeleton className="h-9 w-40" />
         <Skeleton className="h-4 w-80" />
       </div>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <Skeleton className="col-span-2 h-24 rounded-xl sm:col-span-1" />
         <Skeleton className="h-24 rounded-xl" />
         <Skeleton className="h-24 rounded-xl" />
         <Skeleton className="h-24 rounded-xl" />

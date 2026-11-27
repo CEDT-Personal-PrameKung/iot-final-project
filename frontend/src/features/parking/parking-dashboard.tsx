@@ -163,7 +163,10 @@ export function ParkingDashboard({
         </div>
       </div>
 
-      <ParkingSummary environment={snapshot.environment} />
+      <ParkingSummary
+        environment={snapshot.environment}
+        entranceQueue={snapshot.entranceQueue}
+      />
 
       <section aria-label="Parking map" className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

@@ -127,6 +127,11 @@ export const MOCK_PARKING_SNAPSHOT: ParkingOverviewSnapshot = {
       updatedAt: "2026-11-25T15:20:00.000Z",
     },
   ],
+  entranceQueue: {
+    status: "NO_VEHICLE",
+    distance: 145.0,
+    timestamp: "2026-11-25T15:29:52.000Z",
+  },
   occupancyHistory: [
     {
       timestamp: "2026-11-25T12:00:00.000Z",

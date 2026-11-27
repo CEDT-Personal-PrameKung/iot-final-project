@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Clock, Cpu, Radio, Ruler } from "lucide-react";
+import { Camera, Clock, Cpu } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,14 +64,14 @@ export function ParkingSlotDetailSheet({
                 </Badge>
               </div>
               <SheetDescription>
-                {slot.zone} · Real-time sensor and camera metadata
+                {slot.zone} · Real-time camera detection metadata
               </SheetDescription>
             </SheetHeader>
 
             <div className="flex flex-col gap-5 px-4 pb-6">
               <section className="flex flex-col gap-3">
                 <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Sensor Node (ESP32-S3)
+                  Gateway Node
                 </h3>
                 <div className="grid grid-cols-1 gap-2.5 rounded-lg border bg-muted/30 p-3.5 text-sm">
                   <div className="flex items-center justify-between gap-2">
@@ -81,32 +81,6 @@ export function ParkingSlotDetailSheet({
                     </span>
                     <span className="font-mono text-xs font-medium">
                       {slot.deviceId}
-                    </span>
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 text-muted-foreground">
-                      <Ruler aria-hidden="true" className="size-4" />
-                      HY-SRF05 Ultrasonic
-                    </span>
-                    <span className="font-medium tabular-nums">
-                      {slot.ultrasonicDistanceCm !== null
-                        ? `${slot.ultrasonicDistanceCm} cm`
-                        : "No signal"}
-                    </span>
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 text-muted-foreground">
-                      <Radio aria-hidden="true" className="size-4" />
-                      KY-032 IR Obstacle
-                    </span>
-                    <span className="font-medium">
-                      {slot.irObstacleDetected === null
-                        ? "No signal"
-                        : slot.irObstacleDetected
-                          ? "Obstacle detected"
-                          : "Clear"}
                     </span>
                   </div>
                 </div>
