@@ -6,6 +6,7 @@ import {
   DoorOpen,
   Lightbulb,
   Radar,
+  Sparkles,
   WifiOff,
   Wrench,
 } from "lucide-react";
@@ -42,7 +43,7 @@ interface ConfigsLotMapProps {
   selectedBayId: string | null;
   onSelectBay: (bay: ManagedBayConfig) => void;
   onToggleLight: (lightId: string, nextState: boolean) => void;
-  onToggleBarrier: (nextState: "open" | "closed") => void;
+  onBarrierCommand: (command: "auto" | "open" | "closed") => void;
 }
 
 function splitIntoRows(bays: ManagedBayConfig[]): ManagedBayConfig[][] {
@@ -149,7 +150,7 @@ export function ConfigsLotMap({
   selectedBayId,
   onSelectBay,
   onToggleLight,
-  onToggleBarrier,
+  onBarrierCommand,
 }: ConfigsLotMapProps) {
   const rows = useMemo(() => splitIntoRows(bays), [bays]);
   const rowPairs = useMemo(() => groupHeadToHeadPairs(rows), [rows]);
@@ -221,26 +222,42 @@ export function ConfigsLotMap({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => onToggleBarrier(isGateOpen ? "closed" : "open")}
-            className="group flex items-center gap-3 rounded-lg border bg-background/80 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <span
-              aria-hidden="true"
-              className="relative flex h-3 w-16 items-center overflow-hidden rounded-full bg-muted px-0.5"
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onBarrierCommand("auto")}
+              aria-pressed={barrier.mode === "auto"}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                barrier.mode === "auto"
+                  ? "border-transparent bg-status-warning text-status-warning-foreground"
+                  : "bg-background/80 text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <Sparkles aria-hidden="true" className="size-3.5" />
+              Auto
+            </button>
+            <button
+              type="button"
+              onClick={() => onBarrierCommand(isGateOpen ? "closed" : "open")}
+              className="group flex items-center gap-3 rounded-lg border bg-background/80 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span
-                className={cn(
-                  "h-1.5 rounded-full transition-all duration-300",
-                  isGateOpen
-                    ? "w-4 bg-status-available"
-                    : "w-full bg-status-occupied",
-                )}
-              />
-            </span>
-            <span>{isGateOpen ? "Close gate" : "Open gate"}</span>
-          </button>
+                aria-hidden="true"
+                className="relative flex h-3 w-16 items-center overflow-hidden rounded-full bg-muted px-0.5"
+              >
+                <span
+                  className={cn(
+                    "h-1.5 rounded-full transition-all duration-300",
+                    isGateOpen
+                      ? "w-4 bg-status-available"
+                      : "w-full bg-status-occupied",
+                  )}
+                />
+              </span>
+              <span>{isGateOpen ? "Close gate" : "Open gate"}</span>
+            </button>
+          </div>
         </div>
 
         {/* Map Canvas: Perimeter Roads (Left, Top behind A-02, Right) + Head-to-Head Bays */}

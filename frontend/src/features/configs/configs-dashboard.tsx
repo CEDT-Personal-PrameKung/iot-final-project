@@ -10,6 +10,7 @@ import {
   Lightbulb,
   Loader2,
   Radar,
+  Sparkles,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -30,11 +31,12 @@ import { ParkingSummary } from "@/features/parking/parking-summary";
 import { saveAdminConfigs } from "@/lib/api/configs";
 import { cn } from "@/lib/utils";
 import type {
-  BarrierGateState,
   ManagedBayConfig,
   ParkingConfigsSnapshot,
 } from "@/types/configs";
 import type { ParkingOverviewSnapshot, ParkingSlot } from "@/types/parking";
+
+type BarrierCommandChoice = "auto" | "open" | "closed";
 
 interface ConfigsDashboardProps {
   initialConfigs: ParkingConfigsSnapshot;
@@ -113,17 +115,24 @@ export function ConfigsDashboard({
     [],
   );
 
-  const handleManualBarrier = useCallback(
-    (nextState: BarrierGateState) => {
+  const handleBarrierCommand = useCallback(
+    (command: BarrierCommandChoice) => {
       const nowIso = new Date().toISOString();
       applyRealtimeUpdate((prev) => ({
         ...prev,
-        barrier: {
-          ...prev.barrier,
-          state: nextState,
-          mode: "manual",
-          lastOperatedAt: nowIso,
-        },
+        barrier:
+          command === "auto"
+            ? {
+                ...prev.barrier,
+                mode: "auto",
+                lastOperatedAt: nowIso,
+              }
+            : {
+                ...prev.barrier,
+                state: command,
+                mode: "manual",
+                lastOperatedAt: nowIso,
+              },
       }));
     },
     [applyRealtimeUpdate],
@@ -160,6 +169,8 @@ export function ConfigsDashboard({
   );
 
   const isGateOpen = configs.barrier.state === "open";
+  const activeGateChoice: BarrierCommandChoice =
+    configs.barrier.mode === "auto" ? "auto" : configs.barrier.state;
   const activeLightsCount = configs.lighting.lights.filter((l) => l.isOn).length;
 
   return (
@@ -209,7 +220,7 @@ export function ConfigsDashboard({
       {/* Same horizontal Environment Telemetry strip as /parking */}
       <ParkingSummary environment={initialParking.environment} />
 
-      {/* Easy-access Quick Manual Barrier Control Bar */}
+      {/* Easy-access Quick Barrier Control Bar (Auto / Open / Close) */}
       <Card size="sm">
         <CardContent className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -231,9 +242,7 @@ export function ConfigsDashboard({
 
             <div className="flex flex-col gap-0.5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold">
-                  Barrier Gate (Manual)
-                </span>
+                <span className="text-sm font-semibold">Barrier Gate</span>
                 <Badge
                   variant="outline"
                   className={cn(
@@ -245,22 +254,47 @@ export function ConfigsDashboard({
                 >
                   {isGateOpen ? "Open" : "Closed"}
                 </Badge>
+                <Badge variant="secondary" className="text-[11px]">
+                  {configs.barrier.mode === "auto" ? "Auto" : "Manual"}
+                </Badge>
               </div>
               <span className="text-xs text-muted-foreground">
-                Instant override · {activeLightsCount} of{" "}
-                {configs.lighting.lights.length} bay lights on
+                {configs.barrier.mode === "auto"
+                  ? "Automatic gate operation"
+                  : "Manual override"}{" "}
+                · {activeLightsCount} of {configs.lighting.lights.length} bay
+                lights on
               </span>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="group"
+            aria-label="Barrier gate control"
+            className="flex flex-wrap items-center gap-2"
+          >
             <Button
               type="button"
               size="default"
-              variant={isGateOpen ? "default" : "outline"}
-              onClick={() => handleManualBarrier("open")}
+              variant={activeGateChoice === "auto" ? "default" : "outline"}
+              aria-pressed={activeGateChoice === "auto"}
+              onClick={() => handleBarrierCommand("auto")}
               className={cn(
-                isGateOpen &&
+                activeGateChoice === "auto" &&
+                  "bg-status-warning text-status-warning-foreground hover:bg-status-warning/90",
+              )}
+            >
+              <Sparkles aria-hidden="true" data-icon="inline-start" />
+              Auto
+            </Button>
+            <Button
+              type="button"
+              size="default"
+              variant={activeGateChoice === "open" ? "default" : "outline"}
+              aria-pressed={activeGateChoice === "open"}
+              onClick={() => handleBarrierCommand("open")}
+              className={cn(
+                activeGateChoice === "open" &&
                   "bg-status-available text-status-available-foreground hover:bg-status-available/90",
               )}
             >
@@ -270,10 +304,11 @@ export function ConfigsDashboard({
             <Button
               type="button"
               size="default"
-              variant={!isGateOpen ? "default" : "outline"}
-              onClick={() => handleManualBarrier("closed")}
+              variant={activeGateChoice === "closed" ? "default" : "outline"}
+              aria-pressed={activeGateChoice === "closed"}
+              onClick={() => handleBarrierCommand("closed")}
               className={cn(
-                !isGateOpen &&
+                activeGateChoice === "closed" &&
                   "bg-status-occupied text-status-occupied-foreground hover:bg-status-occupied/90",
               )}
             >
@@ -335,7 +370,7 @@ export function ConfigsDashboard({
           selectedBayId={selectedBayId}
           onSelectBay={(bay) => setSelectedBayId(bay.id)}
           onToggleLight={handleToggleMapLight}
-          onToggleBarrier={handleManualBarrier}
+          onBarrierCommand={handleBarrierCommand}
         />
       </section>
 
@@ -359,7 +394,7 @@ export function ConfigsDashboard({
             onChange={(barrier) =>
               applyRealtimeUpdate((prev) => ({ ...prev, barrier }))
             }
-            onManualState={handleManualBarrier}
+            onCommand={handleBarrierCommand}
           />
         </div>
       )}
@@ -388,7 +423,7 @@ export function ConfigsDashboard({
           onChange={(barrier) =>
             applyRealtimeUpdate((prev) => ({ ...prev, barrier }))
           }
-          onManualState={handleManualBarrier}
+          onCommand={handleBarrierCommand}
         />
       )}
 

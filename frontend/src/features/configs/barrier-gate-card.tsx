@@ -1,6 +1,12 @@
 "use client";
 
-import { Clock, DoorClosed, DoorOpen, ShieldCheck } from "lucide-react";
+import {
+  Clock,
+  DoorClosed,
+  DoorOpen,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,20 +24,24 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTelemetryTime } from "@/features/parking/formatters";
 import { cn } from "@/lib/utils";
-import type { BarrierGateConfig, BarrierGateState } from "@/types/configs";
+import type { BarrierGateConfig } from "@/types/configs";
+
+type BarrierCommandChoice = "auto" | "open" | "closed";
 
 interface BarrierGateCardProps {
   value: BarrierGateConfig;
   onChange: (next: BarrierGateConfig) => void;
-  onManualState: (nextState: BarrierGateState) => void;
+  onCommand: (command: BarrierCommandChoice) => void;
 }
 
 export function BarrierGateCard({
   value,
   onChange,
-  onManualState,
+  onCommand,
 }: BarrierGateCardProps) {
   const isOpen = value.state === "open";
+  const activeChoice: BarrierCommandChoice =
+    value.mode === "auto" ? "auto" : value.state;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -39,62 +49,89 @@ export function BarrierGateCard({
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
             <div>
-              <CardTitle>Manual Barrier Gate Control</CardTitle>
+              <CardTitle>Barrier Gate Control</CardTitle>
               <CardDescription>
-                Open or close the entry barrier arm immediately
+                Switch between automatic mode or open/close the barrier arm
               </CardDescription>
             </div>
-            <Badge
-              variant="outline"
-              className={cn(
-                "gap-1.5 border-transparent",
-                isOpen
-                  ? "bg-status-available-muted text-status-available"
-                  : "bg-status-occupied-muted text-status-occupied",
-              )}
-            >
-              <span
-                aria-hidden="true"
+            <div className="flex items-center gap-1.5">
+              <Badge
+                variant="outline"
                 className={cn(
-                  "size-1.5 rounded-full",
-                  isOpen ? "bg-status-available" : "bg-status-occupied",
+                  "gap-1.5 border-transparent",
+                  isOpen
+                    ? "bg-status-available-muted text-status-available"
+                    : "bg-status-occupied-muted text-status-occupied",
                 )}
-              />
-              {isOpen ? "Open" : "Closed"}
-            </Badge>
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "size-1.5 rounded-full",
+                    isOpen ? "bg-status-available" : "bg-status-occupied",
+                  )}
+                />
+                {isOpen ? "Open" : "Closed"}
+              </Badge>
+              <Badge variant="secondary" className="text-[11px]">
+                {value.mode === "auto" ? "Auto" : "Manual"}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
 
         <CardContent className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div
+            role="group"
+            aria-label="Barrier gate commands"
+            className="grid grid-cols-3 gap-2.5"
+          >
             <Button
               type="button"
               size="lg"
-              variant={isOpen ? "default" : "outline"}
-              onClick={() => onManualState("open")}
+              variant={activeChoice === "auto" ? "default" : "outline"}
+              aria-pressed={activeChoice === "auto"}
+              onClick={() => onCommand("auto")}
               className={cn(
                 "h-12",
-                isOpen &&
-                  "bg-status-available text-status-available-foreground hover:bg-status-available/90",
+                activeChoice === "auto" &&
+                  "bg-status-warning text-status-warning-foreground hover:bg-status-warning/90",
               )}
             >
-              <DoorOpen aria-hidden="true" data-icon="inline-start" />
-              Open Gate
+              <Sparkles aria-hidden="true" data-icon="inline-start" />
+              Auto
             </Button>
 
             <Button
               type="button"
               size="lg"
-              variant={!isOpen ? "default" : "outline"}
-              onClick={() => onManualState("closed")}
+              variant={activeChoice === "open" ? "default" : "outline"}
+              aria-pressed={activeChoice === "open"}
+              onClick={() => onCommand("open")}
               className={cn(
                 "h-12",
-                !isOpen &&
+                activeChoice === "open" &&
+                  "bg-status-available text-status-available-foreground hover:bg-status-available/90",
+              )}
+            >
+              <DoorOpen aria-hidden="true" data-icon="inline-start" />
+              Open
+            </Button>
+
+            <Button
+              type="button"
+              size="lg"
+              variant={activeChoice === "closed" ? "default" : "outline"}
+              aria-pressed={activeChoice === "closed"}
+              onClick={() => onCommand("closed")}
+              className={cn(
+                "h-12",
+                activeChoice === "closed" &&
                   "bg-status-occupied text-status-occupied-foreground hover:bg-status-occupied/90",
               )}
             >
               <DoorClosed aria-hidden="true" data-icon="inline-start" />
-              Close Gate
+              Close
             </Button>
           </div>
 
@@ -115,7 +152,8 @@ export function BarrierGateCard({
             MQTT command topic:{" "}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
               {value.topic}
-            </code>
+            </code>{" "}
+            (<code>AUTO</code> / <code>OPEN</code> / <code>CLOSE</code>)
           </p>
         </CardContent>
       </Card>
