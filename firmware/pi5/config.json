@@ -1,0 +1,61 @@
+  {
+  "model_path": "models/best.pt",
+  "camera": {
+    "backend": "picamera2",
+    "device": "/dev/video0",
+    "width": 640,
+    "height": 480,
+    "fps": 30
+  },
+  "inference": {
+    "size": 320,
+    "target_fps": 12,
+    "confidence": 0.5,
+    "nms_iou": 0.9,
+    "max_detections": 80
+  },
+  "parking": {
+    "rows": 2,
+    "columns": 3,
+    "spot_width": 80,
+    "spot_height": 120,
+    "debounce_seconds": 2,
+    "led_pins": {
+      "P1": 5,
+      "P2": 6,
+      "P3": 13,
+      "P4": 16,
+      "P5": 20,
+      "P6": 21
+    }
+  },
+  "gate": {
+    "capacity": 6,
+    "entrance_sensor_pin": 17,
+    "entrance_sensor_active_low": true,
+    "exit_sensor_pin": 27,
+    "exit_sensor_active_low": true,
+    "ultrasonic_trigger_pin": 23,
+    "ultrasonic_echo_pin": 24,
+    "ultrasonic_max_distance_m": 4.0,
+    "obstacle_distance_cm": 60,
+    "servo_pin": 14,
+    "servo_open_angle": 90,
+    "servo_closed_angle": 0,
+    "servo_min_pulse_width_us": 1050,
+    "servo_max_pulse_width_us": 1950,
+    "servo_signal_hold_seconds": 0.35,
+    "ir_assert_debounce_seconds": 0.1,
+    "clearance_confirm_seconds": 0.5,
+    "ir_clear_debounce_seconds": 0.5,
+    "sensor_cooldown_seconds": 1.5,
+    "poll_interval_seconds": 0.05
+  },
+  "stream": {
+    "jpeg_quality": 50
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000
+  }
+}
