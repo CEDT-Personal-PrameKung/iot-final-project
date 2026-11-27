@@ -1,4 +1,4 @@
-import "server-only";
+"use server";
 
 import { MOCK_ACTIVITY_REPORT_LOGS } from "@/features/reports/mock-data";
 import { fetchBackendJson } from "@/lib/api/backend";

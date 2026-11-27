@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowDownLeft,
   ArrowUpRight,
   Download,
   Lightbulb,
+  RefreshCw,
   Search,
   Wifi,
   WifiOff,
@@ -40,7 +41,10 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTelemetryDateTime } from "@/features/parking/formatters";
-import type { ActivityReportsSnapshot } from "@/lib/api/reports";
+import {
+  getActivityReports,
+  type ActivityReportsSnapshot,
+} from "@/lib/api/reports";
 import { cn } from "@/lib/utils";
 import type {
   ParkingActivityEvent,
@@ -88,25 +92,54 @@ const activityTypeMeta: Record<
   },
 };
 
-function isActivityEventMessage(
-  raw: string,
-): ParkingActivityEvent | null {
+const BASE_RECONNECT_DELAY_MS = 1_500;
+const MAX_RECONNECT_DELAY_MS = 30_000;
+
+function mergeLogsNewestFirst(
+  existing: ParkingActivityEvent[],
+  incoming: ParkingActivityEvent[],
+): ParkingActivityEvent[] {
+  const byId = new Map<string, ParkingActivityEvent>();
+  for (const item of existing) {
+    byId.set(item.id, item);
+  }
+  for (const item of incoming) {
+    byId.set(item.id, item);
+  }
+  return Array.from(byId.values()).sort(
+    (a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp),
+  );
+}
+
+function parseReportSocketEvents(raw: string): ParkingActivityEvent[] {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "type" in parsed &&
-      parsed.type === "activity_event" &&
-      "payload" in parsed &&
-      typeof parsed.payload === "object" &&
-      parsed.payload !== null
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !("type" in parsed) ||
+      !("payload" in parsed) ||
+      typeof parsed.payload !== "object" ||
+      parsed.payload === null
     ) {
-      return parsed.payload as ParkingActivityEvent;
+      return [];
     }
-    return null;
+
+    if (parsed.type === "activity_event") {
+      return [parsed.payload as ParkingActivityEvent];
+    }
+
+    if (
+      parsed.type === "snapshot" &&
+      "recentActivity" in parsed.payload &&
+      Array.isArray(parsed.payload.recentActivity)
+    ) {
+      return parsed.payload.recentActivity as ParkingActivityEvent[];
+    }
+
+    return [];
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -124,34 +157,119 @@ interface ReportsDashboardProps {
 export function ReportsDashboard({ initialSnapshot }: ReportsDashboardProps) {
   const wsUrl = process.env.NEXT_PUBLIC_PARKING_WS_URL;
   const [logs, setLogs] = useState<ParkingActivityEvent[]>(initialSnapshot.logs);
+  const [dataSource, setDataSource] = useState(initialSnapshot.dataSource);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [typeFilter, setTypeFilter] = useState<ReportTypeFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const reconnectAttemptsRef = useRef(0);
+
+  const fetchLatestLogs = useCallback(async () => {
+    const fresh = await getActivityReports();
+    setDataSource(fresh.dataSource);
+    if (fresh.dataSource === "live") {
+      setLogs(fresh.logs);
+    }
+  }, []);
+
+  const handleManualRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchLatestLogs();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [fetchLatestLogs]);
+
+  useEffect(() => {
+    let active = true;
+    void getActivityReports().then((fresh) => {
+      if (!active) {
+        return;
+      }
+      setDataSource(fresh.dataSource);
+      if (fresh.dataSource === "live") {
+        setLogs(fresh.logs);
+      }
+    });
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        void fetchLatestLogs();
+      }
+    };
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+    };
+  }, [fetchLatestLogs]);
 
   useEffect(() => {
     if (!wsUrl) {
       return;
     }
 
-    const socket = new WebSocket(wsUrl);
-    socket.onmessage = (message) => {
-      if (typeof message.data !== "string") {
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let isDisposed = false;
+
+    const connect = () => {
+      if (isDisposed) {
         return;
       }
-      const nextEvent = isActivityEventMessage(message.data);
-      if (!nextEvent) {
-        return;
-      }
-      setLogs((prev) =>
-        prev.some((item) => item.id === nextEvent.id)
-          ? prev
-          : [nextEvent, ...prev],
-      );
+
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        const wasReconnect = reconnectAttemptsRef.current > 0;
+        reconnectAttemptsRef.current = 0;
+        if (wasReconnect) {
+          void fetchLatestLogs();
+        }
+      };
+
+      socket.onmessage = (message) => {
+        if (typeof message.data !== "string") {
+          return;
+        }
+        const incoming = parseReportSocketEvents(message.data);
+        if (incoming.length === 0) {
+          return;
+        }
+        setDataSource("live");
+        setLogs((prev) => mergeLogsNewestFirst(prev, incoming));
+      };
+
+      socket.onerror = () => {
+        socket?.close();
+      };
+
+      socket.onclose = () => {
+        if (isDisposed) {
+          return;
+        }
+        reconnectAttemptsRef.current += 1;
+        const delay = Math.min(
+          BASE_RECONNECT_DELAY_MS * 2 ** (reconnectAttemptsRef.current - 1),
+          MAX_RECONNECT_DELAY_MS,
+        );
+        reconnectTimer = setTimeout(connect, delay);
+      };
     };
 
+    connect();
+
     return () => {
-      socket.close();
+      isDisposed = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+      socket?.close();
     };
-  }, [wsUrl]);
+  }, [fetchLatestLogs, wsUrl]);
 
   const counts = useMemo(() => {
     let entries = 0;
@@ -235,14 +353,12 @@ export function ReportsDashboard({ initialSnapshot }: ReportsDashboardProps) {
                 aria-hidden="true"
                 className={cn(
                   "size-1.5 rounded-full",
-                  wsUrl || initialSnapshot.dataSource === "live"
+                  wsUrl || dataSource === "live"
                     ? "bg-status-available"
                     : "bg-status-warning",
                 )}
               />
-              {wsUrl || initialSnapshot.dataSource === "live"
-                ? "Live"
-                : "Mock data"}
+              {wsUrl || dataSource === "live" ? "Live" : "Mock data"}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -251,15 +367,30 @@ export function ReportsDashboard({ initialSnapshot }: ReportsDashboardProps) {
           </p>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          disabled={filteredLogs.length === 0}
-          onClick={handleExportCsv}
-        >
-          <Download aria-hidden="true" data-icon="inline-start" />
-          Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isRefreshing}
+            onClick={() => void handleManualRefresh()}
+          >
+            <RefreshCw
+              aria-hidden="true"
+              data-icon="inline-start"
+              className={cn(isRefreshing && "animate-spin")}
+            />
+            Refresh
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={filteredLogs.length === 0}
+            onClick={handleExportCsv}
+          >
+            <Download aria-hidden="true" data-icon="inline-start" />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       <section
