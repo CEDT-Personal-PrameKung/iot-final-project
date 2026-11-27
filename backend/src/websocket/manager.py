@@ -70,6 +70,9 @@ def compute_parking_events(
     if previous_lights != current_lights:
         events.append(build_ws_message("lighting_status", current.lights))
 
+    if previous.entrance_queue != current.entrance_queue:
+        events.append(build_ws_message("entrance_queue", current.entrance_queue))
+
     previous_activity_ids = {item.id for item in previous.recent_activity}
     new_activities = [
         item

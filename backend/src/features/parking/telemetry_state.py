@@ -15,7 +15,7 @@ from src.features.parking.schemas import (
     ParkingStatusPayload,
     VisionDetectionPayload,
 )
-from src.features.sensors.entrance import EntranceSensorPayload
+from src.features.sensors.entrance import EntranceQueuePayload, EntranceSensorPayload
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ class ParkingTelemetrySnapshot:
     vision_detection: VisionDetectionPayload | None
     entrance_sensor: EntranceSensorPayload | None
     lighting_by_device: dict[str, LightingStatusPayload]
+    entrance_queue: EntranceQueuePayload | None = None
 
 
 TransitionCallback = Callable[[str, Any], None]
@@ -88,6 +89,7 @@ class ParkingTelemetryStore:
         self._parking_status: ParkingStatusPayload | None = None
         self._vision_detection: VisionDetectionPayload | None = None
         self._entrance_sensor: EntranceSensorPayload | None = None
+        self._entrance_queue: EntranceQueuePayload | None = None
         self._lighting_by_device: dict[str, LightingStatusPayload] = {}
 
     def snapshot(self) -> ParkingTelemetrySnapshot:
@@ -98,6 +100,7 @@ class ParkingTelemetryStore:
                 vision_detection=self._vision_detection,
                 entrance_sensor=self._entrance_sensor,
                 lighting_by_device=dict(self._lighting_by_device),
+                entrance_queue=self._entrance_queue,
             )
 
     def handle_parking_status(
@@ -230,6 +233,41 @@ class ParkingTelemetryStore:
 
         if self._on_update is not None:
             self._on_update("entrance_sensor", parsed)
+        return parsed
+
+    def handle_entrance_queue(
+        self, _topic: str, payload: bytes
+    ) -> EntranceQueuePayload | None:
+        """Validate and process a `parking/entrance/queue` MQTT payload."""
+        parsed = EntranceQueuePayload.model_validate_json(payload)
+        with self._lock:
+            previous = self._entrance_queue
+            if previous is not None and parsed.timestamp <= previous.timestamp:
+                logger.debug(
+                    "Ignored stale/duplicate parking/entrance/queue payload (timestamp=%s)",
+                    parsed.timestamp.isoformat(),
+                )
+                return None
+
+            self._entrance_queue = parsed
+
+        changed = previous is None or (
+            previous.status != parsed.status or previous.distance != parsed.distance
+        )
+        if changed:
+            logger.info(
+                "parking/entrance/queue updated: status=%s distance_cm=%s",
+                parsed.status,
+                parsed.distance,
+            )
+        else:
+            logger.debug(
+                "parking/entrance/queue heartbeat received (timestamp=%s)",
+                parsed.timestamp.isoformat(),
+            )
+
+        if self._on_update is not None:
+            self._on_update("entrance_queue", parsed)
         return parsed
 
     def handle_lighting_status(

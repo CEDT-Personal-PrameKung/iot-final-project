@@ -95,6 +95,7 @@ The following topics are the active project convention (see [`docs/mqtt/topics.m
 | `parking/status` | Raspberry Pi 5 | Backend | QoS 0 / Retained | Master snapshot: bay states (`P1`–`P6`), camera, counts, barrier gate, GPIO pins, IR sensors |
 | `parking/vision/detection` | Raspberry Pi 5 | Backend | QoS 0 / No | YOLO inference FPS, detection metadata, and bay occupancy/pending states |
 | `parking/sensor/entrance` | Raspberry Pi 5 | Backend | QoS 0 / No | Entrance/exit IR sensor readings and ultrasonic obstacle distance |
+| `parking/entrance/queue` | Raspberry Pi 5 | Backend | QoS 0 / No | Barrier ultrasonic queue status (`NO_VEHICLE` or `IN_QUEUE`) and distance (cm) when lot is full |
 | `parking/sensor/environment` | YD-ESP32-23 | Raspberry Pi 5, backend | QoS 0 / No | [LDR and BME280 readings](docs/architecture/esp32-telemetry.md) |
 | `parking/lighting/status` | YD-ESP32-23 | Raspberry Pi 5, backend | QoS 0 / Retained | Current state (`leds_on`) of the three parking lights |
 | `parking/control/lighting` | Backend, Raspberry Pi 5 | YD-ESP32-23 | QoS 1 / No | Lighting commands (`ON`, `OFF`, or `AUTO`) |

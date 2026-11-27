@@ -16,9 +16,10 @@ from src.features.parking import (
     ParkingTelemetryStore,
     VisionDetectionPayload,
 )
-from src.features.sensors import EntranceSensorPayload
+from src.features.sensors import EntranceQueuePayload, EntranceSensorPayload
 from src.mqtt.subscriber import build_default_subscriber
 from src.mqtt.topics import (
+    TOPIC_ENTRANCE_QUEUE,
     TOPIC_ENTRANCE_SENSOR,
     TOPIC_ENVIRONMENT_SENSOR,
     TOPIC_LIGHTING_STATUS,
@@ -68,6 +69,10 @@ SAMPLE_ENTRANCE_SENSOR = (
     b'"entrance":{"gpio":17,"detected":false,"raw_level":"HIGH","event_count":12,"last_trigger":"2026-11-26T12:52:06.927+00:00"},'
     b'"exit":{"gpio":27,"detected":false,"raw_level":"HIGH","event_count":5,"last_trigger":"2026-11-26T12:52:05.021+00:00"},'
     b'"obstacle":{"distance_cm":null,"detected":false,"threshold_cm":60.0}}'
+)
+
+SAMPLE_ENTRANCE_QUEUE = (
+    b'{"timestamp":"2026-11-28T01:58:00.000+00:00","distance":24.50,"status":"IN_QUEUE"}'
 )
 
 SAMPLE_LIGHTING_STATUS = (
@@ -151,6 +156,30 @@ class PayloadSchemaTests(unittest.TestCase):
         self.assertEqual(parsed_with_dist.obstacle.distance_cm, 35.4)
         self.assertTrue(parsed_with_dist.obstacle.detected)
 
+    def test_validates_sample_entrance_queue_and_normalizes_status(self) -> None:
+        parsed = EntranceQueuePayload.model_validate_json(SAMPLE_ENTRANCE_QUEUE)
+        self.assertEqual(parsed.distance, 24.5)
+        self.assertEqual(parsed.status, "IN_QUEUE")
+
+        normalized = EntranceQueuePayload.model_validate(
+            {
+                "timestamp": "2026-11-28T01:58:05+00:00",
+                "distance": 0.0,
+                "status": " no_vehicle ",
+            }
+        )
+        self.assertEqual(normalized.distance, 0.0)
+        self.assertEqual(normalized.status, "NO_VEHICLE")
+
+        nullable_distance = EntranceQueuePayload.model_validate(
+            {
+                "timestamp": "2026-11-28T01:58:10+00:00",
+                "distance": None,
+                "status": "NO_VEHICLE",
+            }
+        )
+        self.assertIsNone(nullable_distance.distance)
+
     def test_validates_sample_lighting_status(self) -> None:
         parsed = LightingStatusPayload.model_validate_json(SAMPLE_LIGHTING_STATUS)
         self.assertEqual(parsed.device_id, "yd-esp32-508ec34eb580")
@@ -178,6 +207,32 @@ class PayloadSchemaTests(unittest.TestCase):
         bad_entrance["obstacle"]["threshold_cm"] = 0
         with self.assertRaises(ValidationError):
             EntranceSensorPayload.model_validate(bad_entrance)
+
+        # Invalid entrance queue status, negative distance, or naive timestamp
+        with self.assertRaises(ValidationError):
+            EntranceQueuePayload.model_validate(
+                {
+                    "timestamp": "2026-11-28T01:58:00+00:00",
+                    "distance": 15.0,
+                    "status": "WAITING",
+                }
+            )
+        with self.assertRaises(ValidationError):
+            EntranceQueuePayload.model_validate(
+                {
+                    "timestamp": "2026-11-28T01:58:00+00:00",
+                    "distance": -1.5,
+                    "status": "IN_QUEUE",
+                }
+            )
+        with self.assertRaises(ValidationError):
+            EntranceQueuePayload.model_validate(
+                {
+                    "timestamp": "2026-11-28T01:58:00",
+                    "distance": 15.0,
+                    "status": "IN_QUEUE",
+                }
+            )
 
         # Non-boolean leds_on (strict bool check)
         with self.assertRaises(ValidationError):
@@ -216,6 +271,27 @@ class ParkingTelemetryStoreTests(unittest.TestCase):
         self.assertTrue(updated.parking_spots[0].occupied)
         self.assertEqual(updates, ["parking_status", "parking_status"])
 
+    def test_deduplicates_entrance_queue_messages(self) -> None:
+        updates: list[str] = []
+        store = ParkingTelemetryStore(on_update=lambda kind, _data: updates.append(kind))
+
+        self.assertIsNotNone(
+            store.handle_entrance_queue(TOPIC_ENTRANCE_QUEUE, SAMPLE_ENTRANCE_QUEUE)
+        )
+        self.assertIsNone(
+            store.handle_entrance_queue(TOPIC_ENTRANCE_QUEUE, SAMPLE_ENTRANCE_QUEUE)
+        )
+
+        newer = (
+            b'{"timestamp":"2026-11-28T01:58:10.000+00:00","distance":110.25,"status":"NO_VEHICLE"}'
+        )
+        updated = store.handle_entrance_queue(TOPIC_ENTRANCE_QUEUE, newer)
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.status, "NO_VEHICLE")
+        self.assertEqual(updated.distance, 110.25)
+        self.assertEqual(updates, ["entrance_queue", "entrance_queue"])
+
     def test_tracks_lighting_per_device_and_deduplicates(self) -> None:
         store = ParkingTelemetryStore()
         self.assertIsNotNone(
@@ -243,7 +319,7 @@ class ParkingTelemetryStoreTests(unittest.TestCase):
         self.assertTrue(snap.lighting_by_device["yd-esp32-other"].leds_on)
 
     @patch("src.mqtt.subscriber.service.record_environment_reading")
-    def test_default_subscriber_dispatches_all_five_topics(
+    def test_default_subscriber_dispatches_all_six_topics(
         self, mock_record: MagicMock
     ) -> None:
         store = ParkingTelemetryStore()
@@ -263,6 +339,7 @@ class ParkingTelemetryStoreTests(unittest.TestCase):
             (TOPIC_PARKING_STATUS, SAMPLE_PARKING_STATUS),
             (TOPIC_VISION_DETECTION, SAMPLE_VISION_DETECTION),
             (TOPIC_ENTRANCE_SENSOR, SAMPLE_ENTRANCE_SENSOR),
+            (TOPIC_ENTRANCE_QUEUE, SAMPLE_ENTRANCE_QUEUE),
             (TOPIC_LIGHTING_STATUS, SAMPLE_LIGHTING_STATUS),
             (TOPIC_ENVIRONMENT_SENSOR, env_payload),
             # Malformed payload should be caught & logged without raising
@@ -278,6 +355,9 @@ class ParkingTelemetryStoreTests(unittest.TestCase):
         self.assertIsNotNone(snap.parking_status)
         self.assertIsNotNone(snap.vision_detection)
         self.assertIsNotNone(snap.entrance_sensor)
+        self.assertIsNotNone(snap.entrance_queue)
+        assert snap.entrance_queue is not None
+        self.assertEqual(snap.entrance_queue.status, "IN_QUEUE")
         self.assertIn("yd-esp32-508ec34eb580", snap.lighting_by_device)
         mock_record.assert_called_once_with(env_payload)
 

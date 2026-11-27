@@ -10,6 +10,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from src.features.parking.api_schemas import (
+    EntranceQueueResponse,
     EnvironmentTelemetryResponse,
     ParkingActivityEventResponse,
     ParkingLightResponse,
@@ -31,6 +32,8 @@ def make_snapshot(
     temperature_c: float = 27.5,
     leds_on: bool = True,
     mode: str = "auto",
+    queue_status: str = "NO_VEHICLE",
+    queue_distance: float | None = None,
     activities: list[ParkingActivityEventResponse] | None = None,
     timestamp: datetime | None = None,
 ) -> ParkingOverviewResponse:
@@ -74,6 +77,11 @@ def make_snapshot(
                 updated_at=ts,
             )
         ],
+        entrance_queue=EntranceQueueResponse(
+            status=queue_status,  # type: ignore[arg-type]
+            distance=queue_distance,
+            timestamp=ts if queue_distance is not None or queue_status == "IN_QUEUE" else None,
+        ),
         occupancy_history=[],
         recent_activity=activities or [],
         updated_at=ts,
@@ -152,6 +160,18 @@ class WebSocketDiffTests(unittest.TestCase):
         # Oldest new activity sent first so frontend prepend puts newest at index 0.
         self.assertEqual(events[3]["payload"]["id"], "act-2")
         self.assertEqual(events[4]["payload"]["id"], "act-3")
+
+    def test_detects_entrance_queue_changes(self) -> None:
+        t1 = datetime(2026, 11, 28, 1, 58, 0, tzinfo=UTC)
+        t2 = t1 + timedelta(seconds=5)
+        previous = make_snapshot(queue_status="NO_VEHICLE", queue_distance=None, timestamp=t1)
+        current = make_snapshot(queue_status="IN_QUEUE", queue_distance=18.25, timestamp=t2)
+
+        events = compute_parking_events(previous, current)
+        queue_events = [event for event in events if event["type"] == "entrance_queue"]
+        self.assertEqual(len(queue_events), 1)
+        self.assertEqual(queue_events[0]["payload"]["status"], "IN_QUEUE")
+        self.assertEqual(queue_events[0]["payload"]["distance"], 18.25)
 
 
 class WebSocketBroadcasterTests(unittest.IsolatedAsyncioTestCase):

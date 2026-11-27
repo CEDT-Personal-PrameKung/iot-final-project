@@ -69,6 +69,12 @@ class GatewayStatusRecord(Base):
     """Latest telemetry snapshot reported by a Raspberry Pi 5 edge gateway."""
 
     __tablename__ = "gateway_status"
+    __table_args__ = (
+        CheckConstraint(
+            "queue_status IN ('NO_VEHICLE', 'IN_QUEUE')",
+            name="ck_gateway_status_queue_status",
+        ),
+    )
 
     gateway_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     camera_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
@@ -93,6 +99,11 @@ class GatewayStatusRecord(Base):
     obstacle_distance_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
     obstacle_detected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     obstacle_threshold_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    queue_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="NO_VEHICLE", server_default="NO_VEHICLE"
+    )
+    queue_distance_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_queue_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_status_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_vision_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_entrance_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -119,12 +130,12 @@ class LightingStatusRecord(Base):
 
 
 class ParkingActivityEventRecord(Base):
-    """Append-only log of parking, lighting, barrier, and connectivity events."""
+    """Append-only log of parking, lighting, barrier, queue, and connectivity events."""
 
     __tablename__ = "parking_activity_events"
     __table_args__ = (
         CheckConstraint(
-            "event_type IN ('entry', 'exit', 'offline', 'online', 'lighting', 'barrier')",
+            "event_type IN ('entry', 'exit', 'offline', 'online', 'lighting', 'barrier', 'queue')",
             name="ck_parking_activity_events_type",
         ),
         Index("ix_parking_activity_events_occurred_at", "occurred_at"),

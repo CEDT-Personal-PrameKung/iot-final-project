@@ -16,6 +16,7 @@ from src.mqtt.subscriber import MqttSubscriber, build_default_subscriber
 from src.mqtt.topics import (
     SUBSCRIBED_TOPICS,
     TOPIC_BARRIER_CONTROL,
+    TOPIC_ENTRANCE_QUEUE,
     TOPIC_ENTRANCE_SENSOR,
     TOPIC_ENVIRONMENT_SENSOR,
     TOPIC_LIGHTING_CONTROL,
@@ -160,7 +161,7 @@ class MqttSubscriberTests(unittest.TestCase):
             client_id="smart-parking-backend",
         )
 
-    def test_subscribes_to_all_five_topics_on_connect_and_reconnect(self) -> None:
+    def test_subscribes_to_all_six_topics_on_connect_and_reconnect(self) -> None:
         fake_client: FakeMqttClient | None = None
 
         def factory(config: MqttConfig, **kwargs: object) -> FakeMqttClient:
@@ -189,6 +190,7 @@ class MqttSubscriberTests(unittest.TestCase):
                 TOPIC_PARKING_STATUS,
                 TOPIC_VISION_DETECTION,
                 TOPIC_ENTRANCE_SENSOR,
+                TOPIC_ENTRANCE_QUEUE,
                 TOPIC_LIGHTING_STATUS,
                 TOPIC_ENVIRONMENT_SENSOR,
             ],

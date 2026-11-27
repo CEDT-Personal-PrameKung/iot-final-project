@@ -9,6 +9,7 @@ All edge nodes (Raspberry Pi 5, YD-ESP32-23) and the FastAPI backend connect dir
 | `parking/status` | Raspberry Pi 5 | Backend | 0 | Yes | Neon (`parking_slots`, `gateway_status`, `parking_activity_events`) + Tiger Cloud (`occupancy_history`) |
 | `parking/vision/detection` | Raspberry Pi 5 | Backend | 0 | No | Neon (`gateway_status.inference_fps`, `parking_slots.camera_detection`, throttled) |
 | `parking/sensor/entrance` | Raspberry Pi 5 | Backend | 0 | No | Neon (`gateway_status` entrance/exit/obstacle fields, throttled) |
+| `parking/entrance/queue` | Raspberry Pi 5 | Backend | 0 | No | Neon (`gateway_status` queue status/distance + `parking_activity_events` on transition, throttled) |
 | `parking/sensor/environment` | YD-ESP32-23 | Raspberry Pi 5, Backend | 0 | No | Tiger Cloud (`environment_readings`) |
 | `parking/lighting/status` | YD-ESP32-23 | Raspberry Pi 5, Backend | 0 | Yes | Neon (`lighting_status`, `parking_activity_events` on toggle) |
 | `parking/control/lighting` | Backend, Raspberry Pi 5 | YD-ESP32-23 | 1 | No | Authorized command (`ON`, `OFF`, `AUTO`) |
@@ -110,7 +111,19 @@ Entrance/exit IR sensors and ultrasonic obstacle reading at the barrier gate.
 }
 ```
 
-### 4. `parking/sensor/environment`
+### 4. `parking/entrance/queue`
+
+Barrier entrance queue status published when the ultrasonic sensor mounted in front of the barrier gate detects a waiting vehicle while the parking lot is full (`distance` is in centimeters `cm`, or `null` when out of range; `status` is `"NO_VEHICLE"` or `"IN_QUEUE"`).
+
+```json
+{
+  "timestamp": "2026-11-28T01:58:00.000+00:00",
+  "distance": 24.50,
+  "status": "IN_QUEUE"
+}
+```
+
+### 5. `parking/sensor/environment`
 
 Published by the YD-ESP32-23 (`light_raw` is a 12-bit ADC value `0`–`4095`; `environment` is `null` when BME280 is unavailable).
 
@@ -127,7 +140,7 @@ Published by the YD-ESP32-23 (`light_raw` is a 12-bit ADC value `0`–`4095`; `e
 }
 ```
 
-### 5. `parking/lighting/status`
+### 6. `parking/lighting/status`
 
 Retained lighting output state published by the YD-ESP32-23.
 
@@ -139,7 +152,7 @@ Retained lighting output state published by the YD-ESP32-23.
 }
 ```
 
-### 6. `parking/control/lighting`
+### 7. `parking/control/lighting`
 
 Plain-text command published with QoS 1 and `retain=false`:
 
@@ -147,7 +160,7 @@ Plain-text command published with QoS 1 and `retain=false`:
 - `OFF` — turn all three parking lights off (manual override)
 - `AUTO` — return parking lights to automatic LDR control
 
-### 7. `parking/control/barrier`
+### 8. `parking/control/barrier`
 
 Plain-text command published with QoS 1 and `retain=false` for the Raspberry Pi 5 servo barrier gate:
 

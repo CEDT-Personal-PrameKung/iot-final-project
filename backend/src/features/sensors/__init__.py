@@ -2,8 +2,10 @@
 
 from src.features.sensors.entrance import (
     EntranceIrReading,
+    EntranceQueuePayload,
     EntranceSensorPayload,
     ObstacleReading,
+    QueueStatus,
 )
 from src.features.sensors.environment import (
     EnvironmentMeasurements,
@@ -13,9 +15,11 @@ from src.features.sensors.environment import (
 
 __all__ = [
     "EntranceIrReading",
+    "EntranceQueuePayload",
     "EntranceSensorPayload",
     "EnvironmentMeasurements",
     "EnvironmentReading",
     "ObstacleReading",
+    "QueueStatus",
     "record_environment_reading",
 ]

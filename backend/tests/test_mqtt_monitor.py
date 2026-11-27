@@ -14,7 +14,11 @@ from src.database import User, UserRole
 from src.features.users.security import get_current_user
 from src.main import app
 from src.mqtt.client import MqttConfig
-from src.mqtt.topics import TOPIC_BARRIER_CONTROL, TOPIC_PARKING_STATUS
+from src.mqtt.topics import (
+    TOPIC_BARRIER_CONTROL,
+    TOPIC_ENTRANCE_QUEUE,
+    TOPIC_PARKING_STATUS,
+)
 from src.websocket.mqtt_monitor import MqttMonitorBridge, mqtt_monitor_bridge
 from tests.test_mqtt import FakeMqttClient
 
@@ -54,6 +58,7 @@ class MqttMonitorTests(unittest.TestCase):
         self.assertTrue(body["token"])
         self.assertEqual(body["expiresInSeconds"], 60)
         self.assertIn(TOPIC_PARKING_STATUS, body["topics"])
+        self.assertIn(TOPIC_ENTRANCE_QUEUE, body["topics"])
         self.assertIn(TOPIC_BARRIER_CONTROL, body["topics"])
 
     def test_ws_mqtt_rejects_missing_or_invalid_token(self) -> None:

@@ -14,6 +14,7 @@ from src.features.parking.api_schemas import (
     ActivityReportsResponse,
     BarrierCommandRequest,
     BarrierCommandResponse,
+    EntranceQueueResponse,
     LightingCommandRequest,
     LightingCommandResponse,
     ParkingConfigsResponse,
@@ -27,6 +28,7 @@ from src.features.parking.service import (
     apply_lighting_command,
     get_admin_configs,
     get_activity_reports,
+    get_entrance_queue,
     get_parking_overview,
     update_admin_configs,
 )
@@ -100,6 +102,17 @@ def read_parking_overview(
         db,
         telemetry_engine_getter=telemetry_engine_getter,
     )
+
+
+@parking_router.get(
+    "/entrance/queue",
+    response_model=EntranceQueueResponse,
+    summary="Get current barrier entrance vehicle queue status from the ultrasonic sensor",
+)
+def read_entrance_queue(
+    db: Session = Depends(get_db),
+) -> EntranceQueueResponse:
+    return get_entrance_queue(db)
 
 
 @parking_router.post(

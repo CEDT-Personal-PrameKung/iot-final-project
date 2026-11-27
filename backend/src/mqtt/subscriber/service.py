@@ -19,6 +19,7 @@ from src.features.sensors.environment import record_environment_reading
 from src.mqtt.client import MqttConfig, create_mqtt_client, load_mqtt_config
 from src.mqtt.topics import (
     SUBSCRIBED_TOPICS,
+    TOPIC_ENTRANCE_QUEUE,
     TOPIC_ENTRANCE_SENSOR,
     TOPIC_ENVIRONMENT_SENSOR,
     TOPIC_LIGHTING_STATUS,
@@ -240,6 +241,9 @@ def build_default_subscriber(
     )
     subscriber.register_handler(
         TOPIC_ENTRANCE_SENSOR, telemetry_store.handle_entrance_sensor
+    )
+    subscriber.register_handler(
+        TOPIC_ENTRANCE_QUEUE, telemetry_store.handle_entrance_queue
     )
     subscriber.register_handler(
         TOPIC_LIGHTING_STATUS, telemetry_store.handle_lighting_status

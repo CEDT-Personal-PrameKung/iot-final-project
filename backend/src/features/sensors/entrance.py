@@ -1,12 +1,21 @@
-"""Pydantic schemas for the entrance/exit IR and obstacle sensor MQTT payload."""
+"""Pydantic schemas for entrance/exit IR, obstacle, and barrier queue MQTT payloads."""
 
 from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, Field, FiniteFloat, StrictBool, StrictInt
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    Field,
+    FiniteFloat,
+    StrictBool,
+    StrictInt,
+    field_validator,
+)
 
 GpioLevel = Literal["HIGH", "LOW"]
+QueueStatus = Literal["NO_VEHICLE", "IN_QUEUE"]
 
 
 class EntranceIrReading(BaseModel):
@@ -31,3 +40,18 @@ class EntranceSensorPayload(BaseModel):
     entrance: EntranceIrReading
     exit: EntranceIrReading
     obstacle: ObstacleReading
+
+
+class EntranceQueuePayload(BaseModel):
+    """Payload published on `parking/entrance/queue` from the barrier ultrasonic sensor."""
+
+    timestamp: AwareDatetime
+    distance: Annotated[FiniteFloat, Field(ge=0)] | None = None
+    status: QueueStatus
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().upper()
+        return value

@@ -23,7 +23,7 @@ from src.features.parking.schemas import (
     ParkingStatusPayload,
     VisionDetectionPayload,
 )
-from src.features.sensors.entrance import EntranceSensorPayload
+from src.features.sensors.entrance import EntranceQueuePayload, EntranceSensorPayload
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +90,7 @@ class ParkingPersistenceService:
         self._last_neon_status_at: datetime | None = None
         self._last_neon_vision_at: datetime | None = None
         self._last_neon_entrance_at: datetime | None = None
+        self._last_neon_queue_at: datetime | None = None
         self._last_occupancy_sample_at: datetime | None = None
         self._last_occupancy_signature: tuple[int, int, int, str] | None = None
         self._neon_warned = False
@@ -103,6 +104,8 @@ class ParkingPersistenceService:
             self.persist_vision_detection(payload)
         elif kind == "entrance_sensor" and isinstance(payload, EntranceSensorPayload):
             self.persist_entrance_sensor(payload)
+        elif kind == "entrance_queue" and isinstance(payload, EntranceQueuePayload):
+            self.persist_entrance_queue(payload)
         elif kind == "lighting_status" and isinstance(payload, LightingStatusPayload):
             self.persist_lighting_status(payload)
 
@@ -405,6 +408,75 @@ class ParkingPersistenceService:
                     gateway.updated_at = payload.timestamp
 
             self._last_neon_entrance_at = payload.timestamp
+
+    def persist_entrance_queue(self, payload: EntranceQueuePayload) -> None:
+        """Persist barrier ultrasonic entrance queue status and record queue transitions."""
+        with self._lock:
+            if self._session_factory is None:
+                self._warn_neon_missing()
+                return
+
+            next_distance = (
+                float(payload.distance) if payload.distance is not None else None
+            )
+
+            with self._session_factory() as session:
+                with session.begin():
+                    gateway = session.get(GatewayStatusRecord, self._gateway_id)
+                    previous_status = (
+                        gateway.queue_status if gateway is not None else "NO_VEHICLE"
+                    )
+                    changed = gateway is None or (
+                        gateway.queue_status != payload.status
+                        or gateway.queue_distance_cm != next_distance
+                    )
+                    if not changed and not _should_write_heartbeat(
+                        self._last_neon_queue_at,
+                        payload.timestamp,
+                        self._heartbeat_interval_seconds,
+                    ):
+                        return
+
+                    if gateway is None:
+                        gateway = GatewayStatusRecord(
+                            gateway_id=self._gateway_id,
+                            updated_at=payload.timestamp,
+                        )
+                        session.add(gateway)
+
+                    gateway.queue_status = payload.status
+                    gateway.queue_distance_cm = next_distance
+                    gateway.last_queue_at = payload.timestamp
+                    gateway.obstacle_distance_cm = next_distance
+                    gateway.obstacle_detected = payload.status == "IN_QUEUE"
+                    gateway.updated_at = payload.timestamp
+
+                    if previous_status != payload.status:
+                        if payload.status == "IN_QUEUE":
+                            summary = "Vehicle waiting in entrance queue"
+                            detail = (
+                                f"Ultrasonic detected vehicle at {next_distance:.2f} cm in front of barrier"
+                                if next_distance is not None
+                                else "Ultrasonic detected vehicle in front of barrier"
+                            )
+                        else:
+                            summary = "Entrance queue cleared"
+                            detail = (
+                                f"Barrier entrance clear (ultrasonic {next_distance:.2f} cm)"
+                                if next_distance is not None
+                                else "Barrier entrance clear"
+                            )
+                        session.add(
+                            ParkingActivityEventRecord(
+                                event_type="queue",
+                                device_id=self._gateway_id,
+                                summary=summary,
+                                detail=detail,
+                                occurred_at=payload.timestamp,
+                            )
+                        )
+
+            self._last_neon_queue_at = payload.timestamp
 
     def persist_lighting_status(self, payload: LightingStatusPayload) -> None:
         """Upsert lighting device state and record a lighting activity event on change."""

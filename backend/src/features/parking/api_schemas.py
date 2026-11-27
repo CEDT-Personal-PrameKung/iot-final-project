@@ -15,6 +15,7 @@ LightConditionType = Literal["bright", "moderate", "dim", "dark"]
 LightingControlModeType = Literal["auto", "manual"]
 ParkingActivityType = Literal["entry", "exit", "offline", "online", "lighting"]
 BarrierGateStateType = Literal["open", "closed"]
+EntranceQueueStatusType = Literal["NO_VEHICLE", "IN_QUEUE"]
 DataSourceType = Literal["mock", "live"]
 
 
@@ -82,10 +83,19 @@ class ParkingActivityEventResponse(ApiModel):
     timestamp: datetime
 
 
+class EntranceQueueResponse(ApiModel):
+    status: EntranceQueueStatusType = "NO_VEHICLE"
+    distance: float | None = None
+    timestamp: datetime | None = None
+
+
 class ParkingOverviewResponse(ApiModel):
     slots: list[ParkingSlotResponse]
     environment: EnvironmentTelemetryResponse
     lights: list[ParkingLightResponse]
+    entrance_queue: EntranceQueueResponse = Field(
+        default_factory=EntranceQueueResponse, alias="entranceQueue"
+    )
     occupancy_history: list[OccupancyTrendPointResponse] = Field(alias="occupancyHistory")
     recent_activity: list[ParkingActivityEventResponse] = Field(alias="recentActivity")
     updated_at: datetime = Field(alias="updatedAt")

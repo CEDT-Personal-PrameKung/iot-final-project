@@ -160,6 +160,9 @@ class ParkingApiTests(unittest.TestCase):
                         barrier_state="open",
                         servo_target_angle=90.0,
                         mqtt_connected=True,
+                        queue_status="IN_QUEUE",
+                        queue_distance_cm=22.5,
+                        last_queue_at=now,
                         updated_at=now,
                     ),
                     LightingStatusRecord(
@@ -230,12 +233,35 @@ class ParkingApiTests(unittest.TestCase):
         self.assertEqual(body["environment"]["lightCondition"], "moderate")
         self.assertEqual(len(body["lights"]), 3)
         self.assertTrue(body["lights"][0]["isOn"])
+        self.assertEqual(body["entranceQueue"]["status"], "IN_QUEUE")
+        self.assertEqual(body["entranceQueue"]["distance"], 22.5)
+        self.assertIsNotNone(body["entranceQueue"]["timestamp"])
         self.assertEqual(len(body["occupancyHistory"]), 1)
         self.assertEqual(body["occupancyHistory"][0]["occupied"], 1)
         self.assertEqual(len(body["recentActivity"]), 2)
         # Barrier event is normalized to frontend-safe activity type.
         types = {event["type"] for event in body["recentActivity"]}
         self.assertTrue(types.issubset({"entry", "exit", "offline", "online", "lighting"}))
+
+    def test_entrance_queue_endpoint_returns_latest_status(self) -> None:
+        response = self.client.get("/parking/entrance/queue")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "IN_QUEUE")
+        self.assertEqual(body["distance"], 22.5)
+        self.assertIsNotNone(body["timestamp"])
+
+        # When no gateway row exists, defaults safely to NO_VEHICLE.
+        with self.session_factory() as session:
+            session.query(GatewayStatusRecord).delete()
+            session.commit()
+
+        empty_response = self.client.get("/parking/entrance/queue")
+        self.assertEqual(empty_response.status_code, 200)
+        self.assertEqual(
+            empty_response.json(),
+            {"status": "NO_VEHICLE", "distance": None, "timestamp": None},
+        )
 
     def test_parking_overview_survives_missing_tiger_cloud(self) -> None:
         app.dependency_overrides[get_optional_telemetry_engine_getter] = lambda: None

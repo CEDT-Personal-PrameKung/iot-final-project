@@ -22,14 +22,16 @@ from src.features.parking import (
     ParkingTelemetryStore,
     VisionDetectionPayload,
 )
-from src.features.sensors import EntranceSensorPayload
+from src.features.sensors import EntranceQueuePayload, EntranceSensorPayload
 from src.mqtt.topics import (
+    TOPIC_ENTRANCE_QUEUE,
     TOPIC_ENTRANCE_SENSOR,
     TOPIC_LIGHTING_STATUS,
     TOPIC_PARKING_STATUS,
     TOPIC_VISION_DETECTION,
 )
 from tests.test_mqtt_handlers import (
+    SAMPLE_ENTRANCE_QUEUE,
     SAMPLE_ENTRANCE_SENSOR,
     SAMPLE_LIGHTING_STATUS,
     SAMPLE_PARKING_STATUS,
@@ -213,6 +215,62 @@ class ParkingPersistenceTests(unittest.TestCase):
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0].event_type, "lighting")
             self.assertIn("off", events[0].summary)
+
+    def test_persists_entrance_queue_transitions_and_throttles_heartbeats(self) -> None:
+        store = ParkingTelemetryStore(on_update=self.persistence.handle_telemetry_update)
+
+        # 1. Vehicle detected in queue -> writes immediately and logs queue event.
+        store.handle_entrance_queue(TOPIC_ENTRANCE_QUEUE, SAMPLE_ENTRANCE_QUEUE)
+
+        with self.session_factory() as session:
+            gateway = session.get(GatewayStatusRecord, "rpi5-gateway-01")
+            assert gateway is not None
+            self.assertEqual(gateway.queue_status, "IN_QUEUE")
+            self.assertEqual(gateway.queue_distance_cm, 24.5)
+            self.assertIsNotNone(gateway.last_queue_at)
+            self.assertTrue(gateway.obstacle_detected)
+            self.assertEqual(gateway.obstacle_distance_cm, 24.5)
+
+            events = session.query(ParkingActivityEventRecord).all()
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0].event_type, "queue")
+            self.assertIn("waiting", events[0].summary)
+            self.assertIn("24.50 cm", events[0].detail)
+
+        # 2. Unchanged heartbeat 5s later is throttled (no Neon write, no extra event).
+        unchanged = json.loads(SAMPLE_ENTRANCE_QUEUE)
+        unchanged["timestamp"] = "2026-11-28T01:58:05.000+00:00"
+        store.handle_entrance_queue(TOPIC_ENTRANCE_QUEUE, json.dumps(unchanged).encode())
+
+        with self.session_factory() as session:
+            gateway = session.get(GatewayStatusRecord, "rpi5-gateway-01")
+            assert gateway is not None
+            self.assertEqual(gateway.last_queue_at.second, 0)
+            self.assertEqual(session.query(ParkingActivityEventRecord).count(), 1)
+
+        # 3. Vehicle leaves queue -> transitions to NO_VEHICLE and logs clear event.
+        cleared = {
+            "timestamp": "2026-11-28T01:58:20.000+00:00",
+            "distance": 120.0,
+            "status": "NO_VEHICLE",
+        }
+        store.handle_entrance_queue(TOPIC_ENTRANCE_QUEUE, json.dumps(cleared).encode())
+
+        with self.session_factory() as session:
+            gateway = session.get(GatewayStatusRecord, "rpi5-gateway-01")
+            assert gateway is not None
+            self.assertEqual(gateway.queue_status, "NO_VEHICLE")
+            self.assertEqual(gateway.queue_distance_cm, 120.0)
+            self.assertFalse(gateway.obstacle_detected)
+
+            events = (
+                session.query(ParkingActivityEventRecord)
+                .order_by(ParkingActivityEventRecord.occurred_at)
+                .all()
+            )
+            self.assertEqual(len(events), 2)
+            self.assertEqual([e.event_type for e in events], ["queue", "queue"])
+            self.assertIn("cleared", events[1].summary)
 
 
 if __name__ == "__main__":

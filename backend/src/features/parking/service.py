@@ -23,6 +23,8 @@ from src.features.parking.api_schemas import (
     BarrierCommandResponse,
     BarrierGateConfig,
     BarrierGateStateType,
+    EntranceQueueResponse,
+    EntranceQueueStatusType,
     EnvironmentTelemetryResponse,
     GatewayNodeStatus,
     LightConditionType,
@@ -47,6 +49,7 @@ from src.features.parking.api_schemas import (
 from src.mqtt.publisher import BarrierCommand, LightingCommand
 from src.mqtt.topics import (
     TOPIC_BARRIER_CONTROL,
+    TOPIC_ENTRANCE_QUEUE,
     TOPIC_ENTRANCE_SENSOR,
     TOPIC_ENVIRONMENT_SENSOR,
     TOPIC_LIGHTING_CONTROL,
@@ -295,6 +298,28 @@ def _serialize_activity_event(
     )
 
 
+def _normalize_queue_status(raw: str | None) -> EntranceQueueStatusType:
+    return "IN_QUEUE" if raw == "IN_QUEUE" else "NO_VEHICLE"
+
+
+def _build_entrance_queue(gateway: GatewayStatusRecord | None) -> EntranceQueueResponse:
+    if gateway is None:
+        return EntranceQueueResponse()
+    return EntranceQueueResponse(
+        status=_normalize_queue_status(gateway.queue_status),
+        distance=gateway.queue_distance_cm,
+        timestamp=_ensure_utc(gateway.last_queue_at) if gateway.last_queue_at else None,
+    )
+
+
+def get_entrance_queue(db: Session) -> EntranceQueueResponse:
+    """Return the latest barrier ultrasonic entrance queue status."""
+    gateway = db.scalar(
+        select(GatewayStatusRecord).order_by(desc(GatewayStatusRecord.updated_at)).limit(1)
+    )
+    return _build_entrance_queue(gateway)
+
+
 def get_parking_overview(
     db: Session,
     *,
@@ -325,6 +350,10 @@ def get_parking_overview(
         for slot in slot_records
     ]
 
+    gateway = db.scalar(
+        select(GatewayStatusRecord).order_by(desc(GatewayStatusRecord.updated_at)).limit(1)
+    )
+    entrance_queue = _build_entrance_queue(gateway)
     environment = _fetch_latest_environment(telemetry_engine_getter, now)
     lights, latest_light = _build_lights_list(db, saved_config, now)
     occupancy_history = _fetch_occupancy_history(telemetry_engine_getter, history_limit)
@@ -338,6 +367,8 @@ def get_parking_overview(
 
     candidate_timestamps: list[datetime] = []
     candidate_timestamps.extend(slot.updated_at for slot in slots)
+    if entrance_queue.timestamp is not None:
+        candidate_timestamps.append(entrance_queue.timestamp)
     if latest_light is not None:
         candidate_timestamps.append(_ensure_utc(latest_light.updated_at))
     if recent_activity:
@@ -351,6 +382,7 @@ def get_parking_overview(
         slots=slots,
         environment=environment,
         lights=lights,
+        entrance_queue=entrance_queue,
         occupancy_history=occupancy_history,
         recent_activity=recent_activity,
         updated_at=updated_at,
@@ -603,6 +635,7 @@ def get_admin_configs(db: Session) -> ParkingConfigsResponse:
                     TOPIC_PARKING_STATUS,
                     TOPIC_VISION_DETECTION,
                     TOPIC_ENTRANCE_SENSOR,
+                    TOPIC_ENTRANCE_QUEUE,
                     TOPIC_BARRIER_CONTROL,
                 ],
                 last_seen_at=gw_seen,
