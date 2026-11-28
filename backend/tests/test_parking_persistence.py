@@ -267,6 +267,40 @@ class ParkingPersistenceTests(unittest.TestCase):
             )
             self.assertEqual(len(exit_events), 1)
 
+    def test_uses_occupied_regardless_of_pending_and_ignores_stale_timestamps(self) -> None:
+        self.persistence.persist_parking_status(
+            ParkingStatusPayload.model_validate_json(SAMPLE_PARKING_STATUS)
+        )
+
+        # Occupied=True updates status immediately even if pending=True.
+        vision_occupied = json.loads(SAMPLE_VISION_DETECTION)
+        vision_occupied["timestamp"] = "2026-11-26T12:54:20.000+00:00"
+        vision_occupied["parking_spots"][0]["occupied"] = True
+        vision_occupied["parking_spots"][0]["pending"] = True
+        self.persistence.persist_vision_detection(
+            VisionDetectionPayload.model_validate(vision_occupied)
+        )
+
+        # Stale/older parking/status (12:54:19.500) must NOT revert P1 or log exit.
+        stale_status = json.loads(SAMPLE_PARKING_STATUS)
+        stale_status["timestamp"] = "2026-11-26T12:54:19.500+00:00"
+        stale_status["parking_spots"][0]["occupied"] = False
+        self.persistence.persist_parking_status(
+            ParkingStatusPayload.model_validate(stale_status)
+        )
+
+        # Duplicate worker delivering exact same timestamp (12:54:20.000) must NOT log a second entry.
+        second_worker = ParkingPersistenceService(session_factory=self.session_factory)
+        second_worker.persist_vision_detection(
+            VisionDetectionPayload.model_validate(vision_occupied)
+        )
+
+        with self.session_factory() as session:
+            p1 = session.get(ParkingSlotRecord, "P1")
+            assert p1 is not None
+            self.assertEqual(p1.status, "occupied")
+            self.assertEqual(session.query(ParkingActivityEventRecord).count(), 1)
+
     def test_persists_lighting_status_and_records_toggle_event(self) -> None:
         first = LightingStatusPayload.model_validate_json(SAMPLE_LIGHTING_STATUS)
         self.persistence.persist_lighting_status(first)

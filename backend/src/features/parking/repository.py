@@ -91,7 +91,7 @@ class ParkingPersistenceService:
         self._last_neon_vision_at: datetime | None = None
         self._last_neon_entrance_at: datetime | None = None
         self._last_neon_queue_at: datetime | None = None
-        self._last_vision_spots: dict[str, tuple[bool, bool]] = {}
+        self._last_vision_spots: dict[str, bool] = {}
         self._last_vision_detection_labels: dict[str, str | None] = {}
         self._last_occupancy_sample_at: datetime | None = None
         self._last_occupancy_signature: tuple[int, int, int, str] | None = None
@@ -195,12 +195,18 @@ class ParkingPersistenceService:
                             )
                         )
                     else:
-                        previous_status = existing.status
-                        existing.status = next_status
-                        existing.pending = spot.pending
+                        if _ensure_utc(payload.timestamp) <= _ensure_utc(
+                            existing.last_seen_at
+                        ):
+                            continue
+
                         if pin_info is not None:
                             existing.gpio_pin = pin_info.pin
                             existing.gpio_level = pin_info.level
+                        existing.pending = spot.pending
+
+                        previous_status = existing.status
+                        existing.status = next_status
                         if previous_status != "occupied" and next_status == "occupied":
                             existing.occupied_since = payload.timestamp
                             session.add(
@@ -334,7 +340,7 @@ class ParkingPersistenceService:
                     detection_labels[item.spot_id] = item.label
 
             current_spots = {
-                spot.id: (spot.occupied, spot.pending)
+                spot.id: spot.occupied
                 for spot in payload.parking_spots
             }
             spots_changed = bool(current_spots) and (
@@ -399,18 +405,24 @@ class ParkingPersistenceService:
                             )
                             db_changed = True
                         else:
-                            previous_status = existing.status
-                            if (
-                                previous_status != next_status
-                                or existing.pending != spot.pending
-                                or (detection is not None and existing.camera_detection != detection)
+                            is_newer = _ensure_utc(payload.timestamp) > _ensure_utc(
+                                existing.last_seen_at
+                            )
+                            if detection is not None and (
+                                is_newer or existing.camera_detection is None
                             ):
-                                db_changed = True
-
-                            existing.status = next_status
-                            existing.pending = spot.pending
-                            if detection is not None:
+                                if existing.camera_detection != detection:
+                                    db_changed = True
                                 existing.camera_detection = detection
+
+                            if not is_newer:
+                                continue
+
+                            existing.pending = spot.pending
+                            previous_status = existing.status
+                            if previous_status != next_status:
+                                db_changed = True
+                            existing.status = next_status
 
                             if previous_status != "occupied" and next_status == "occupied":
                                 existing.occupied_since = payload.timestamp
