@@ -153,8 +153,25 @@ class BarrierCommandResponse(ApiModel):
     updated_at: datetime = Field(alias="updatedAt")
 
 
+class ActivitySummaryCountsResponse(ApiModel):
+    total: int = 0
+    entries: int = 0
+    exits: int = 0
+    lighting: int = 0
+    devices: int = 0
+
+
 class ActivityReportsResponse(ApiModel):
     logs: list[ParkingActivityEventResponse]
+    total: int = 0
+    page: int = 1
+    page_size: int = Field(default=25, alias="pageSize")
+    total_pages: int = Field(default=1, alias="totalPages")
+    has_next: bool = Field(default=False, alias="hasNext")
+    has_prev: bool = Field(default=False, alias="hasPrev")
+    summary: ActivitySummaryCountsResponse = Field(
+        default_factory=ActivitySummaryCountsResponse
+    )
     updated_at: datetime = Field(alias="updatedAt")
     data_source: DataSourceType = Field(default="live", alias="dataSource")
 

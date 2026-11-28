@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
-from sqlalchemy import desc, or_, select, text
+from sqlalchemy import desc, func, or_, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from src.database.models.parking import (
 )
 from src.features.parking.api_schemas import (
     ActivityReportsResponse,
+    ActivitySummaryCountsResponse,
     BarrierCommandResponse,
     BarrierGateConfig,
     BarrierGateStateType,
@@ -396,30 +398,86 @@ def get_activity_reports(
     event_type: str | None = None,
     slot_id: str | None = None,
     search: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
     limit: int | None = None,
-    offset: int = 0,
+    offset: int | None = None,
 ) -> ActivityReportsResponse:
-    """Return full or filtered activity logs ordered newest-first."""
-    stmt = select(ParkingActivityEventRecord).order_by(
-        desc(ParkingActivityEventRecord.occurred_at)
+    """Return paginated and filtered activity logs ordered newest-first."""
+    # Aggregate global counts by event_type in a single indexed query.
+    grouped_counts = db.execute(
+        select(
+            ParkingActivityEventRecord.event_type,
+            func.count(ParkingActivityEventRecord.id),
+        ).group_by(ParkingActivityEventRecord.event_type)
+    ).all()
+
+    summary_entries = 0
+    summary_exits = 0
+    summary_lighting = 0
+    summary_devices = 0
+    for raw_type, count in grouped_counts:
+        qty = int(count)
+        if raw_type == "entry":
+            summary_entries += qty
+        elif raw_type == "exit":
+            summary_exits += qty
+        elif raw_type == "lighting":
+            summary_lighting += qty
+        else:
+            summary_devices += qty
+    summary = ActivitySummaryCountsResponse(
+        total=summary_entries + summary_exits + summary_lighting + summary_devices,
+        entries=summary_entries,
+        exits=summary_exits,
+        lighting=summary_lighting,
+        devices=summary_devices,
     )
-    if event_type:
-        stmt = stmt.where(ParkingActivityEventRecord.event_type == event_type)
+
+    conditions = []
+    if event_type and event_type != "all":
+        if event_type == "device":
+            conditions.append(
+                ParkingActivityEventRecord.event_type.not_in(
+                    ("entry", "exit", "lighting")
+                )
+            )
+        else:
+            conditions.append(ParkingActivityEventRecord.event_type == event_type)
     if slot_id:
-        stmt = stmt.where(ParkingActivityEventRecord.slot_id == slot_id)
+        conditions.append(ParkingActivityEventRecord.slot_id == slot_id)
     if search and search.strip():
         pattern = f"%{search.strip()}%"
-        stmt = stmt.where(
+        conditions.append(
             or_(
                 ParkingActivityEventRecord.summary.ilike(pattern),
                 ParkingActivityEventRecord.detail.ilike(pattern),
                 ParkingActivityEventRecord.slot_code.ilike(pattern),
+                ParkingActivityEventRecord.event_type.ilike(pattern),
             )
         )
-    if offset > 0:
-        stmt = stmt.offset(offset)
-    if limit is not None:
-        stmt = stmt.limit(limit)
+
+    count_stmt = select(func.count(ParkingActivityEventRecord.id))
+    if conditions:
+        count_stmt = count_stmt.where(*conditions)
+    filtered_total = int(db.scalar(count_stmt) or 0)
+
+    effective_limit = max(1, limit if limit is not None else page_size)
+    total_pages = max(1, math.ceil(filtered_total / effective_limit))
+    if offset is not None:
+        effective_offset = max(0, offset)
+        resolved_page = (effective_offset // effective_limit) + 1
+    else:
+        resolved_page = min(max(1, page), total_pages)
+        effective_offset = (resolved_page - 1) * effective_limit
+
+    stmt = select(ParkingActivityEventRecord).order_by(
+        desc(ParkingActivityEventRecord.occurred_at),
+        desc(ParkingActivityEventRecord.id),
+    )
+    if conditions:
+        stmt = stmt.where(*conditions)
+    stmt = stmt.offset(effective_offset).limit(effective_limit)
 
     records = db.scalars(stmt).all()
     logs = [_serialize_activity_event(item) for item in records]
@@ -427,6 +485,13 @@ def get_activity_reports(
 
     return ActivityReportsResponse(
         logs=logs,
+        total=filtered_total,
+        page=resolved_page,
+        page_size=effective_limit,
+        total_pages=total_pages,
+        has_next=resolved_page < total_pages,
+        has_prev=resolved_page > 1,
+        summary=summary,
         updated_at=updated_at,
         data_source="live",
     )

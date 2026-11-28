@@ -300,10 +300,47 @@ class ParkingApiTests(unittest.TestCase):
         response = self.client.post("/parking/lighting", json={"command": "ON"})
         self.assertEqual(response.status_code, 503)
 
-    def test_reports_activity_supports_filters(self) -> None:
+    def test_reports_activity_supports_filters_and_pagination(self) -> None:
         res_all = self.client.get("/reports/activity")
         self.assertEqual(res_all.status_code, 200)
-        self.assertEqual(len(res_all.json()["logs"]), 2)
+        body_all = res_all.json()
+        self.assertEqual(len(body_all["logs"]), 2)
+        self.assertEqual(body_all["total"], 2)
+        self.assertEqual(body_all["page"], 1)
+        self.assertEqual(body_all["pageSize"], 25)
+        self.assertEqual(body_all["totalPages"], 1)
+        self.assertFalse(body_all["hasNext"])
+        self.assertFalse(body_all["hasPrev"])
+        self.assertEqual(body_all["summary"]["total"], 2)
+        self.assertEqual(body_all["summary"]["entries"], 1)
+        self.assertEqual(body_all["summary"]["devices"], 1)
+
+        # Paginate 1 item per page across 2 records.
+        res_page_1 = self.client.get("/reports/activity?page=1&page_size=1")
+        self.assertEqual(res_page_1.status_code, 200)
+        page_1 = res_page_1.json()
+        self.assertEqual(len(page_1["logs"]), 1)
+        self.assertEqual(page_1["total"], 2)
+        self.assertEqual(page_1["totalPages"], 2)
+        self.assertTrue(page_1["hasNext"])
+        self.assertFalse(page_1["hasPrev"])
+
+        res_page_2 = self.client.get("/reports/activity?page=2&page_size=1")
+        self.assertEqual(res_page_2.status_code, 200)
+        page_2 = res_page_2.json()
+        self.assertEqual(len(page_2["logs"]), 1)
+        self.assertEqual(page_2["page"], 2)
+        self.assertFalse(page_2["hasNext"])
+        self.assertTrue(page_2["hasPrev"])
+        self.assertNotEqual(page_1["logs"][0]["id"], page_2["logs"][0]["id"])
+
+        # Filter by device group (includes barrier/online/offline/queue).
+        res_device = self.client.get("/reports/activity?event_type=device")
+        self.assertEqual(res_device.status_code, 200)
+        device_body = res_device.json()
+        self.assertEqual(device_body["total"], 1)
+        self.assertEqual(len(device_body["logs"]), 1)
+        self.assertIn("Barrier", device_body["logs"][0]["summary"])
 
         res_filtered = self.client.get("/reports/activity?event_type=entry&search=P1")
         self.assertEqual(res_filtered.status_code, 200)

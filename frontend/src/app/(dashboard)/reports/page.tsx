@@ -33,7 +33,7 @@ async function AdminReportsPage() {
     redirect("/parking");
   }
 
-  const snapshot = await getActivityReports();
+  const snapshot = await getActivityReports({ page: 1, pageSize: 25 });
   const wsUrl = getPublicParkingWsUrl();
   return <ReportsDashboard initialSnapshot={snapshot} wsUrl={wsUrl} />;
 }

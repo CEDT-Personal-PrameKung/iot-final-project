@@ -175,14 +175,16 @@ def control_parking_barrier(
 @reports_router.get(
     "/activity",
     response_model=ActivityReportsResponse,
-    summary="List parking activity logs",
+    summary="List paginated parking activity logs",
 )
 def read_activity_reports(
     event_type: str | None = Query(default=None),
     slot_id: str | None = Query(default=None),
     search: str | None = Query(default=None),
-    limit: int | None = Query(default=None, ge=1, le=5000),
-    offset: int = Query(default=0, ge=0),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=200),
+    limit: int | None = Query(default=None, ge=1, le=1000),
+    offset: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
 ) -> ActivityReportsResponse:
     return get_activity_reports(
@@ -190,6 +192,8 @@ def read_activity_reports(
         event_type=event_type,
         slot_id=slot_id,
         search=search,
+        page=page,
+        page_size=page_size,
         limit=limit,
         offset=offset,
     )

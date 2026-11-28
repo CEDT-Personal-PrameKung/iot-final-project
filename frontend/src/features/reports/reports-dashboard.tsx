@@ -6,8 +6,12 @@ import {
   Activity,
   ArrowDownLeft,
   ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Lightbulb,
+  Loader2,
+  MoreHorizontal,
   Radio,
   RefreshCw,
   Search,
@@ -21,6 +25,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -46,6 +51,8 @@ import { formatTelemetryDateTime } from "@/features/parking/formatters";
 import {
   getActivityReports,
   type ActivityReportsSnapshot,
+  type ActivitySummaryCounts,
+  type ReportTypeFilter,
 } from "@/lib/api/reports";
 import { cn } from "@/lib/utils";
 import type {
@@ -53,7 +60,11 @@ import type {
   ParkingActivityType,
 } from "@/types/parking";
 
-type ReportTypeFilter = "all" | "entry" | "exit" | "lighting" | "device";
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const CSV_EXPORT_LIMIT = 1000;
+const SEARCH_DEBOUNCE_MS = 300;
+const BASE_RECONNECT_DELAY_MS = 1_500;
+const MAX_RECONNECT_DELAY_MS = 30_000;
 
 const activityTypeMeta: Record<
   ParkingActivityType,
@@ -94,23 +105,37 @@ const activityTypeMeta: Record<
   },
 };
 
-const BASE_RECONNECT_DELAY_MS = 1_500;
-const MAX_RECONNECT_DELAY_MS = 30_000;
+function matchesTypeFilter(
+  eventType: ParkingActivityType,
+  filter: ReportTypeFilter,
+): boolean {
+  if (filter === "all") {
+    return true;
+  }
+  if (filter === "device") {
+    return eventType === "offline" || eventType === "online";
+  }
+  return eventType === filter;
+}
 
-function mergeLogsNewestFirst(
-  existing: ParkingActivityEvent[],
+function incrementSummary(
+  current: ActivitySummaryCounts,
   incoming: ParkingActivityEvent[],
-): ParkingActivityEvent[] {
-  const byId = new Map<string, ParkingActivityEvent>();
-  for (const item of existing) {
-    byId.set(item.id, item);
-  }
+): ActivitySummaryCounts {
+  let { total, entries, exits, lighting, devices } = current;
   for (const item of incoming) {
-    byId.set(item.id, item);
+    total += 1;
+    if (item.type === "entry") {
+      entries += 1;
+    } else if (item.type === "exit") {
+      exits += 1;
+    } else if (item.type === "lighting") {
+      lighting += 1;
+    } else {
+      devices += 1;
+    }
   }
-  return Array.from(byId.values()).sort(
-    (a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp),
-  );
+  return { total, entries, exits, lighting, devices };
 }
 
 function parseReportSocketEvents(raw: string): ParkingActivityEvent[] {
@@ -131,18 +156,35 @@ function parseReportSocketEvents(raw: string): ParkingActivityEvent[] {
       return [parsed.payload as ParkingActivityEvent];
     }
 
-    if (
-      parsed.type === "snapshot" &&
-      "recentActivity" in parsed.payload &&
-      Array.isArray(parsed.payload.recentActivity)
-    ) {
-      return parsed.payload.recentActivity as ParkingActivityEvent[];
-    }
-
     return [];
   } catch {
     return [];
   }
+}
+
+function buildPageTokens(
+  currentPage: number,
+  totalPages: number,
+): Array<number | "ellipsis"> {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const tokens: Array<number | "ellipsis"> = [1];
+  const windowStart = Math.max(2, currentPage - 1);
+  const windowEnd = Math.min(totalPages - 1, currentPage + 1);
+
+  if (windowStart > 2) {
+    tokens.push("ellipsis");
+  }
+  for (let page = windowStart; page <= windowEnd; page += 1) {
+    tokens.push(page);
+  }
+  if (windowEnd < totalPages - 1) {
+    tokens.push("ellipsis");
+  }
+  tokens.push(totalPages);
+  return tokens;
 }
 
 function escapeCsvCell(value: string): string {
@@ -162,57 +204,122 @@ export function ReportsDashboard({
   wsUrl: serverWsUrl,
 }: ReportsDashboardProps) {
   const wsUrl = serverWsUrl || process.env.NEXT_PUBLIC_PARKING_WS_URL;
-  const [logs, setLogs] = useState<ParkingActivityEvent[]>(initialSnapshot.logs);
-  const [dataSource, setDataSource] = useState(initialSnapshot.dataSource);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [snapshot, setSnapshot] =
+    useState<ActivityReportsSnapshot>(initialSnapshot);
+  const [page, setPage] = useState(initialSnapshot.page);
+  const [pageSize, setPageSize] = useState(initialSnapshot.pageSize);
   const [typeFilter, setTypeFilter] = useState<ReportTypeFilter>("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const reconnectAttemptsRef = useRef(0);
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [isLoadingPage, setIsLoadingPage] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
-  const fetchLatestLogs = useCallback(async () => {
-    const fresh = await getActivityReports();
-    setDataSource(fresh.dataSource);
-    if (fresh.dataSource === "live") {
-      setLogs(fresh.logs);
+  const reconnectAttemptsRef = useRef(0);
+  const requestSeqRef = useRef(0);
+  const isInitialMountRef = useRef(true);
+  const seenLiveIdsRef = useRef<Set<string>>(
+    new Set(initialSnapshot.logs.map((item) => item.id)),
+  );
+  const queryRef = useRef({
+    page: initialSnapshot.page,
+    pageSize: initialSnapshot.pageSize,
+    typeFilter: "all" as ReportTypeFilter,
+    search: "",
+  });
+
+  useEffect(() => {
+    queryRef.current = {
+      page,
+      pageSize,
+      typeFilter,
+      search: debouncedSearch,
+    };
+  }, [debouncedSearch, page, pageSize, typeFilter]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const fetchPage = useCallback(
+    async (
+      targetPage: number,
+      targetPageSize: number,
+      targetType: ReportTypeFilter,
+      targetSearch: string,
+      options?: { silent?: boolean },
+    ) => {
+      const seq = requestSeqRef.current + 1;
+      requestSeqRef.current = seq;
+      if (!options?.silent) {
+        setIsLoadingPage(true);
+      }
+
+      try {
+        const fresh = await getActivityReports({
+          page: targetPage,
+          pageSize: targetPageSize,
+          eventType: targetType,
+          search: targetSearch,
+        });
+        if (requestSeqRef.current !== seq) {
+          return;
+        }
+        seenLiveIdsRef.current = new Set(fresh.logs.map((item) => item.id));
+        setSnapshot(fresh);
+        if (fresh.page !== targetPage) {
+          setPage(fresh.page);
+        }
+      } finally {
+        if (requestSeqRef.current === seq && !options?.silent) {
+          setIsLoadingPage(false);
+        }
+      }
+    },
+    [],
+  );
+
+  // Fetch new page whenever pagination or filter parameters change.
+  useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
     }
-  }, []);
+    void fetchPage(page, pageSize, typeFilter, debouncedSearch);
+  }, [debouncedSearch, fetchPage, page, pageSize, typeFilter]);
 
   const handleManualRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await fetchLatestLogs();
+      const { page: p, pageSize: ps, typeFilter: tf, search } = queryRef.current;
+      await fetchPage(p, ps, tf, search, { silent: true });
     } finally {
       setIsRefreshing(false);
     }
-  }, [fetchLatestLogs]);
+  }, [fetchPage]);
 
+  // Refresh active page when returning to the browser tab.
   useEffect(() => {
-    let active = true;
-    void getActivityReports().then((fresh) => {
-      if (!active) {
-        return;
-      }
-      setDataSource(fresh.dataSource);
-      if (fresh.dataSource === "live") {
-        setLogs(fresh.logs);
-      }
-    });
-
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === "visible") {
-        void fetchLatestLogs();
+        const { page: p, pageSize: ps, typeFilter: tf, search } =
+          queryRef.current;
+        void fetchPage(p, ps, tf, search, { silent: true });
       }
     };
 
     window.addEventListener("focus", handleVisibilityOrFocus);
     document.addEventListener("visibilitychange", handleVisibilityOrFocus);
     return () => {
-      active = false;
       window.removeEventListener("focus", handleVisibilityOrFocus);
       document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
     };
-  }, [fetchLatestLogs]);
+  }, [fetchPage]);
 
+  // Live WebSocket stream: updates summary counts and prepends into page 1 cleanly.
   useEffect(() => {
     if (!wsUrl) {
       return;
@@ -233,7 +340,9 @@ export function ReportsDashboard({
         const wasReconnect = reconnectAttemptsRef.current > 0;
         reconnectAttemptsRef.current = 0;
         if (wasReconnect) {
-          void fetchLatestLogs();
+          const { page: p, pageSize: ps, typeFilter: tf, search } =
+            queryRef.current;
+          void fetchPage(p, ps, tf, search, { silent: true });
         }
       };
 
@@ -241,12 +350,62 @@ export function ReportsDashboard({
         if (typeof message.data !== "string") {
           return;
         }
-        const incoming = parseReportSocketEvents(message.data);
+        const incoming = parseReportSocketEvents(message.data).filter(
+          (item) => !seenLiveIdsRef.current.has(item.id),
+        );
         if (incoming.length === 0) {
           return;
         }
-        setDataSource("live");
-        setLogs((prev) => mergeLogsNewestFirst(prev, incoming));
+        for (const item of incoming) {
+          seenLiveIdsRef.current.add(item.id);
+        }
+
+        const { page: activePage, pageSize: activeSize, typeFilter: activeType, search: activeSearch } =
+          queryRef.current;
+
+        setSnapshot((prev) => {
+          const nextSummary = incrementSummary(prev.summary, incoming);
+          const matchingIncoming = incoming.filter((item) => {
+            if (!matchesTypeFilter(item.type, activeType)) {
+              return false;
+            }
+            if (!activeSearch) {
+              return true;
+            }
+            const q = activeSearch.toLowerCase();
+            return (
+              item.summary.toLowerCase().includes(q) ||
+              item.detail.toLowerCase().includes(q) ||
+              (item.slotCode?.toLowerCase().includes(q) ?? false) ||
+              item.type.toLowerCase().includes(q)
+            );
+          });
+
+          const nextTotal = prev.total + matchingIncoming.length;
+          const nextTotalPages = Math.max(1, Math.ceil(nextTotal / activeSize));
+
+          // Keep page 2+ stable while reading history; prepend live events only on page 1.
+          const nextLogs =
+            activePage === 1 && matchingIncoming.length > 0
+              ? [...matchingIncoming, ...prev.logs]
+                  .sort(
+                    (a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp),
+                  )
+                  .slice(0, activeSize)
+              : prev.logs;
+
+          return {
+            ...prev,
+            logs: nextLogs,
+            total: nextTotal,
+            totalPages: nextTotalPages,
+            hasNext: activePage < nextTotalPages,
+            hasPrev: activePage > 1,
+            summary: nextSummary,
+            updatedAt: incoming[0]?.timestamp ?? prev.updatedAt,
+            dataSource: "live",
+          };
+        });
       };
 
       socket.onerror = () => {
@@ -275,78 +434,53 @@ export function ReportsDashboard({
       }
       socket?.close();
     };
-  }, [fetchLatestLogs, wsUrl]);
+  }, [fetchPage, wsUrl]);
 
-  const counts = useMemo(() => {
-    let entries = 0;
-    let exits = 0;
-    let lighting = 0;
-    let devices = 0;
+  const handleExportCsv = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const exportBatch = await getActivityReports({
+        eventType: typeFilter,
+        search: debouncedSearch,
+        limit: CSV_EXPORT_LIMIT,
+      });
+      const header = ["Timestamp", "Type", "Bay", "Summary", "Detail"];
+      const rows = exportBatch.logs.map((item) => [
+        item.timestamp,
+        activityTypeMeta[item.type].label,
+        item.slotCode ?? "",
+        item.summary,
+        item.detail,
+      ]);
+      const csvContent = [header, ...rows]
+        .map((row) => row.map(escapeCsvCell).join(","))
+        .join("\n");
 
-    for (const item of logs) {
-      if (item.type === "entry") {
-        entries += 1;
-      } else if (item.type === "exit") {
-        exits += 1;
-      } else if (item.type === "lighting") {
-        lighting += 1;
-      } else {
-        devices += 1;
-      }
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "smart-parking-activity-logs.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsExporting(false);
     }
+  }, [debouncedSearch, typeFilter]);
 
-    return { total: logs.length, entries, exits, lighting, devices };
-  }, [logs]);
+  const pageTokens = useMemo(
+    () => buildPageTokens(snapshot.page, snapshot.totalPages),
+    [snapshot.page, snapshot.totalPages],
+  );
 
-  const filteredLogs = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
+  const rangeStart =
+    snapshot.total === 0 ? 0 : (snapshot.page - 1) * snapshot.pageSize + 1;
+  const rangeEnd = Math.min(
+    snapshot.total,
+    (snapshot.page - 1) * snapshot.pageSize + snapshot.logs.length,
+  );
 
-    return logs.filter((event) => {
-      const matchesType =
-        typeFilter === "all"
-          ? true
-          : typeFilter === "device"
-            ? event.type === "offline" || event.type === "online"
-            : event.type === typeFilter;
-
-      if (!matchesType) {
-        return false;
-      }
-
-      if (!normalizedQuery) {
-        return true;
-      }
-
-      return (
-        event.summary.toLowerCase().includes(normalizedQuery) ||
-        event.detail.toLowerCase().includes(normalizedQuery) ||
-        (event.slotCode?.toLowerCase().includes(normalizedQuery) ?? false) ||
-        event.type.toLowerCase().includes(normalizedQuery)
-      );
-    });
-  }, [logs, searchQuery, typeFilter]);
-
-  const handleExportCsv = () => {
-    const header = ["Timestamp", "Type", "Bay", "Summary", "Detail"];
-    const rows = filteredLogs.map((item) => [
-      item.timestamp,
-      activityTypeMeta[item.type].label,
-      item.slotCode ?? "",
-      item.summary,
-      item.detail,
-    ]);
-    const csvContent = [header, ...rows]
-      .map((row) => row.map(escapeCsvCell).join(","))
-      .join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "smart-parking-activity-logs.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const counts = snapshot.summary;
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10">
@@ -359,16 +493,16 @@ export function ReportsDashboard({
                 aria-hidden="true"
                 className={cn(
                   "size-1.5 rounded-full",
-                  wsUrl || dataSource === "live"
+                  wsUrl || snapshot.dataSource === "live"
                     ? "bg-status-available"
                     : "bg-status-warning",
                 )}
               />
-              {wsUrl || dataSource === "live" ? "Live" : "Mock data"}
+              {wsUrl || snapshot.dataSource === "live" ? "Live" : "Mock data"}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            Complete activity log history for vehicle entries, exits, lighting,
+            Paginated activity log history for vehicle entries, exits, lighting,
             and sensor status.
           </p>
         </div>
@@ -384,7 +518,7 @@ export function ReportsDashboard({
           <Button
             type="button"
             variant="outline"
-            disabled={isRefreshing}
+            disabled={isRefreshing || isLoadingPage}
             onClick={() => void handleManualRefresh()}
           >
             <RefreshCw
@@ -397,10 +531,18 @@ export function ReportsDashboard({
           <Button
             type="button"
             variant="outline"
-            disabled={filteredLogs.length === 0}
-            onClick={handleExportCsv}
+            disabled={snapshot.total === 0 || isExporting}
+            onClick={() => void handleExportCsv()}
           >
-            <Download aria-hidden="true" data-icon="inline-start" />
+            {isExporting ? (
+              <Loader2
+                aria-hidden="true"
+                data-icon="inline-start"
+                className="animate-spin"
+              />
+            ) : (
+              <Download aria-hidden="true" data-icon="inline-start" />
+            )}
             Export CSV
           </Button>
         </div>
@@ -418,7 +560,7 @@ export function ReportsDashboard({
           </CardHeader>
           <CardContent>
             <span className="text-3xl font-semibold tracking-tight tabular-nums">
-              {counts.total}
+              {counts.total.toLocaleString()}
             </span>
           </CardContent>
         </Card>
@@ -431,7 +573,7 @@ export function ReportsDashboard({
           </CardHeader>
           <CardContent>
             <span className="text-3xl font-semibold tracking-tight tabular-nums">
-              {counts.entries}
+              {counts.entries.toLocaleString()}
             </span>
           </CardContent>
         </Card>
@@ -444,7 +586,7 @@ export function ReportsDashboard({
           </CardHeader>
           <CardContent>
             <span className="text-3xl font-semibold tracking-tight tabular-nums">
-              {counts.exits}
+              {counts.exits.toLocaleString()}
             </span>
           </CardContent>
         </Card>
@@ -457,7 +599,7 @@ export function ReportsDashboard({
           </CardHeader>
           <CardContent>
             <span className="text-3xl font-semibold tracking-tight tabular-nums">
-              {counts.lighting + counts.devices}
+              {(counts.lighting + counts.devices).toLocaleString()}
             </span>
           </CardContent>
         </Card>
@@ -467,13 +609,23 @@ export function ReportsDashboard({
         <CardHeader className="gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Activity Logs</CardTitle>
-              <CardDescription>
-                Showing all {filteredLogs.length} matching records (unbounded)
+              <CardTitle className="flex items-center gap-2">
+                Activity Logs
+                {isLoadingPage && (
+                  <Loader2
+                    aria-label="Loading page"
+                    className="size-4 animate-spin text-muted-foreground"
+                  />
+                )}
+              </CardTitle>
+              <CardDescription className="tabular-nums">
+                {snapshot.total > 0
+                  ? `Showing ${rangeStart.toLocaleString()}–${rangeEnd.toLocaleString()} of ${snapshot.total.toLocaleString()} matching records`
+                  : "No matching records"}
               </CardDescription>
             </div>
             <Badge variant="secondary" className="tabular-nums">
-              {filteredLogs.length} / {counts.total}
+              Page {snapshot.page} of {snapshot.totalPages}
             </Badge>
           </div>
 
@@ -487,8 +639,11 @@ export function ReportsDashboard({
                 type="search"
                 aria-label="Search activity logs"
                 placeholder="Search bay, event, or sensor..."
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                value={searchInput}
+                onChange={(event) => {
+                  setSearchInput(event.target.value);
+                  setPage(1);
+                }}
                 className="pl-8"
               />
             </div>
@@ -504,6 +659,7 @@ export function ReportsDashboard({
                   nextValue === "device"
                 ) {
                   setTypeFilter(nextValue);
+                  setPage(1);
                 }
               }}
             >
@@ -525,49 +681,56 @@ export function ReportsDashboard({
         </CardHeader>
 
         <CardContent>
-          {filteredLogs.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Bay</TableHead>
-                  <TableHead>Event</TableHead>
-                  <TableHead>Details</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredLogs.map((event) => {
-                  const meta = activityTypeMeta[event.type];
-                  const Icon = meta.icon;
-                  return (
-                    <TableRow key={event.id}>
-                      <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
-                        {formatTelemetryDateTime(event.timestamp)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn("gap-1", meta.badgeClassName)}
-                        >
-                          <Icon aria-hidden="true" className="size-3" />
-                          {meta.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono font-medium">
-                        {event.slotCode ?? "—"}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {event.summary}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {event.detail}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+          {snapshot.logs.length > 0 ? (
+            <div
+              className={cn(
+                "transition-opacity",
+                isLoadingPage && "opacity-60",
+              )}
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Bay</TableHead>
+                    <TableHead>Event</TableHead>
+                    <TableHead>Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {snapshot.logs.map((event) => {
+                    const meta = activityTypeMeta[event.type];
+                    const Icon = meta.icon;
+                    return (
+                      <TableRow key={event.id}>
+                        <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
+                          {formatTelemetryDateTime(event.timestamp)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn("gap-1", meta.badgeClassName)}
+                          >
+                            <Icon aria-hidden="true" className="size-3" />
+                            {meta.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono font-medium">
+                          {event.slotCode ?? "—"}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {event.summary}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {event.detail}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           ) : (
             <Empty className="border">
               <EmptyHeader>
@@ -585,8 +748,10 @@ export function ReportsDashboard({
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setSearchQuery("");
+                    setSearchInput("");
+                    setDebouncedSearch("");
                     setTypeFilter("all");
+                    setPage(1);
                   }}
                 >
                   Clear filters
@@ -595,6 +760,93 @@ export function ReportsDashboard({
             </Empty>
           )}
         </CardContent>
+
+        <CardFooter className="flex flex-wrap items-center justify-between gap-4 border-t pt-4">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <label htmlFor="reports-page-size" className="whitespace-nowrap">
+              Rows per page
+            </label>
+            <select
+              id="reports-page-size"
+              value={pageSize}
+              disabled={isLoadingPage}
+              onChange={(event) => {
+                const nextSize = Number(event.target.value);
+                if (
+                  PAGE_SIZE_OPTIONS.includes(
+                    nextSize as (typeof PAGE_SIZE_OPTIONS)[number],
+                  )
+                ) {
+                  setPageSize(nextSize);
+                  setPage(1);
+                }
+              }}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {PAGE_SIZE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <nav
+            aria-label="Activity logs pagination"
+            className="flex flex-wrap items-center gap-1"
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!snapshot.hasPrev || isLoadingPage}
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            >
+              <ChevronLeft aria-hidden="true" data-icon="inline-start" />
+              <span className="hidden sm:inline">Previous</span>
+            </Button>
+
+            <div className="flex items-center gap-1">
+              {pageTokens.map((token, index) =>
+                token === "ellipsis" ? (
+                  <span
+                    key={`ellipsis-${index}`}
+                    aria-hidden="true"
+                    className="flex size-8 items-center justify-center text-muted-foreground"
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </span>
+                ) : (
+                  <Button
+                    key={token}
+                    type="button"
+                    size="sm"
+                    variant={token === snapshot.page ? "default" : "ghost"}
+                    aria-current={token === snapshot.page ? "page" : undefined}
+                    disabled={isLoadingPage}
+                    onClick={() => setPage(token)}
+                    className="min-w-8 px-2 tabular-nums"
+                  >
+                    {token}
+                  </Button>
+                ),
+              )}
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!snapshot.hasNext || isLoadingPage}
+              onClick={() =>
+                setPage((prev) => Math.min(snapshot.totalPages, prev + 1))
+              }
+            >
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight aria-hidden="true" data-icon="inline-end" />
+            </Button>
+          </nav>
+        </CardFooter>
       </Card>
     </main>
   );
