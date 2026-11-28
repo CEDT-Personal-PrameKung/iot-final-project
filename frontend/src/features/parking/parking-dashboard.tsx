@@ -13,6 +13,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AiInsightCard } from "@/features/insights/ai-insight-card";
 import {
   STREAM_STATUS_LABEL,
   computeParkingSummary,
@@ -235,6 +236,8 @@ export function ParkingDashboard({
           />
         )}
       </section>
+
+      <AiInsightCard />
 
       <ParkingSlotDetailSheet
         slot={selectedSlot}

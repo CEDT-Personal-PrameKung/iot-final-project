@@ -7,6 +7,7 @@ from fastapi import FastAPI, responses
 from fastapi.middleware.cors import CORSMiddleware
 from scalar_doc import ScalarDoc
 from src.api.health import router as health_router
+from src.features.insights.router import insights_router
 from src.features.parking.router import (
     close_shared_mqtt_publisher,
     configs_router,
@@ -106,6 +107,7 @@ app.include_router(users_router)
 app.include_router(parking_router)
 app.include_router(reports_router)
 app.include_router(configs_router)
+app.include_router(insights_router)
 app.include_router(websocket_router)
 app.include_router(mqtt_monitor_router)
 

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     ws_poll_interval_seconds: float = Field(default=2.0, ge=0.2, le=60.0)
     app_secret_key: SecretStr | None = None
     access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str = "gemini-3.1-flash-lite"
+    insights_cache_ttl_seconds: int = Field(default=300, ge=30, le=3600)
+    insights_refresh_cooldown_seconds: int = Field(default=30, ge=0, le=600)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
