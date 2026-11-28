@@ -57,11 +57,13 @@ Use the timestamp to detect stale retained status.
 {"device_id":"yd-esp32-112233445566","timestamp_unix_s":1784973600,"leds_on":true}
 ```
 
-`parking/control/lighting` accepts the exact plain-text payload `ON`, `OFF`, or `AUTO`.
+`parking/control/lighting` accepts the exact plain-text payload `ON`, `OFF`, or
+`AUTO`.
 The ESP32 applies it on the next sample and reports the applied state on the
 next upload. Retained commands are ignored on subscription.
 Commands set all three outputs together and can be repeated safely.
 
-The LDR controls the lights from boot until an `ON` or `OFF` command is received.
-A manual command overrides the LDR until `AUTO` is sent, reboot, or a later command,
-including through a Wi-Fi or MQTT outage. Uploads are skipped while disconnected.
+At boot and after `AUTO`, all three lights turn on when the raw LDR reading is
+below 1200 and turn off at 1200 or above. `ON` and `OFF` override the LDR and
+stay in effect through Wi-Fi or MQTT outages until another command or reboot.
+Uploads are skipped while disconnected.

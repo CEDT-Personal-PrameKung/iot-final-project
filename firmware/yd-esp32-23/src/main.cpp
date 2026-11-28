@@ -31,7 +31,7 @@ SensorSample latestSample{};
 
 void sampleSensors() {
   const int lightReading = analogRead(LDR_PIN);
-  const bool ledsOn = telemetry::resolveLighting(lightReading > LDR_THRESHOLD);
+  const bool ledsOn = telemetry::resolveLighting(lightReading >= LDR_THRESHOLD);
   for (const int pin : LED_PINS) {
     digitalWrite(pin, ledsOn ? HIGH : LOW);
   }
