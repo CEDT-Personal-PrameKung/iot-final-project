@@ -218,8 +218,8 @@ def build_default_subscriber(
         )
 
         def handle_update(kind: str, data: Any) -> None:
-            resolved_persistence.handle_telemetry_update(kind, data)
-            if on_persisted is not None:
+            changed = resolved_persistence.handle_telemetry_update(kind, data)
+            if changed and on_persisted is not None:
                 on_persisted(kind, data)
 
         telemetry_store = ParkingTelemetryStore(on_update=handle_update)

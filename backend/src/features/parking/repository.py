@@ -91,34 +91,41 @@ class ParkingPersistenceService:
         self._last_neon_vision_at: datetime | None = None
         self._last_neon_entrance_at: datetime | None = None
         self._last_neon_queue_at: datetime | None = None
+        self._last_vision_spots: dict[str, tuple[bool, bool]] = {}
+        self._last_vision_detection_labels: dict[str, str | None] = {}
         self._last_occupancy_sample_at: datetime | None = None
         self._last_occupancy_signature: tuple[int, int, int, str] | None = None
         self._neon_warned = False
         self._tiger_warned = False
 
-    def handle_telemetry_update(self, kind: str, payload: Any) -> None:
-        """Callback compatible with `ParkingTelemetryStore(on_update=...)`."""
-        if kind == "parking_status" and isinstance(payload, ParkingStatusPayload):
-            self.persist_parking_status(payload)
-        elif kind == "vision_detection" and isinstance(payload, VisionDetectionPayload):
-            self.persist_vision_detection(payload)
-        elif kind == "entrance_sensor" and isinstance(payload, EntranceSensorPayload):
-            self.persist_entrance_sensor(payload)
-        elif kind == "entrance_queue" and isinstance(payload, EntranceQueuePayload):
-            self.persist_entrance_queue(payload)
-        elif kind == "lighting_status" and isinstance(payload, LightingStatusPayload):
-            self.persist_lighting_status(payload)
+    def handle_telemetry_update(self, kind: str, payload: Any) -> bool:
+        """Callback compatible with `ParkingTelemetryStore(on_update=...)`.
 
-    def persist_parking_status(self, payload: ParkingStatusPayload) -> None:
+        Returns True when Neon state changed and live WebSocket clients should refresh.
+        """
+        if kind == "parking_status" and isinstance(payload, ParkingStatusPayload):
+            return self.persist_parking_status(payload)
+        if kind == "vision_detection" and isinstance(payload, VisionDetectionPayload):
+            return self.persist_vision_detection(payload)
+        if kind == "entrance_sensor" and isinstance(payload, EntranceSensorPayload):
+            return self.persist_entrance_sensor(payload)
+        if kind == "entrance_queue" and isinstance(payload, EntranceQueuePayload):
+            return self.persist_entrance_queue(payload)
+        if kind == "lighting_status" and isinstance(payload, LightingStatusPayload):
+            return self.persist_lighting_status(payload)
+        return False
+
+    def persist_parking_status(self, payload: ParkingStatusPayload) -> bool:
         """Persist slot states, gateway snapshot, activity events, and occupancy trend."""
         with self._lock:
-            self._persist_parking_status_neon(payload)
+            changed = self._persist_parking_status_neon(payload)
             self._persist_occupancy_history_tiger(payload)
+            return changed
 
-    def _persist_parking_status_neon(self, payload: ParkingStatusPayload) -> None:
+    def _persist_parking_status_neon(self, payload: ParkingStatusPayload) -> bool:
         if self._session_factory is None:
             self._warn_neon_missing()
-            return
+            return False
 
         gpio_by_spot = {pin.spot: pin for pin in payload.gpio_pins}
         entrance_ir, exit_ir = _extract_ir_pair(payload)
@@ -164,7 +171,7 @@ class ParkingPersistenceService:
                     payload.timestamp,
                     self._heartbeat_interval_seconds,
                 ):
-                    return
+                    return False
 
                 # Upsert parking slots and record entry/exit events on real transitions.
                 for spot in payload.parking_spots:
@@ -209,6 +216,7 @@ class ParkingPersistenceService:
                             )
                         elif previous_status == "occupied" and next_status == "available":
                             existing.occupied_since = None
+                            existing.camera_detection = None
                             session.add(
                                 ParkingActivityEventRecord(
                                     event_type="exit",
@@ -264,6 +272,7 @@ class ParkingPersistenceService:
                     )
 
             self._last_neon_status_at = payload.timestamp
+            return meaningful_change
 
     def _persist_occupancy_history_tiger(self, payload: ParkingStatusPayload) -> None:
         if self._telemetry_engine_getter is None:
@@ -310,25 +319,39 @@ class ParkingPersistenceService:
         self._last_occupancy_sample_at = payload.timestamp
         self._last_occupancy_signature = signature
 
-    def persist_vision_detection(self, payload: VisionDetectionPayload) -> None:
-        """Persist YOLO inference metadata and spot detections (throttled on steady state)."""
+    def persist_vision_detection(self, payload: VisionDetectionPayload) -> bool:
+        """Persist YOLO detections and bay occupancy transitions immediately, throttling steady-state FPS."""
         with self._lock:
             if self._session_factory is None:
                 self._warn_neon_missing()
-                return
+                return False
 
             detections_by_spot: dict[str, dict[str, Any]] = {}
+            detection_labels: dict[str, str | None] = {}
             for item in payload.detections:
                 if item.spot_id:
                     detections_by_spot[item.spot_id] = item.model_dump(mode="json")
+                    detection_labels[item.spot_id] = item.label
 
-            has_detections = bool(detections_by_spot)
-            if not has_detections and not _should_write_heartbeat(
+            current_spots = {
+                spot.id: (spot.occupied, spot.pending)
+                for spot in payload.parking_spots
+            }
+            spots_changed = bool(current_spots) and (
+                current_spots != self._last_vision_spots
+            )
+            detections_changed = detection_labels != self._last_vision_detection_labels
+            meaningful_change = spots_changed or detections_changed
+
+            if not meaningful_change and not _should_write_heartbeat(
                 self._last_neon_vision_at,
                 payload.timestamp,
                 self._heartbeat_interval_seconds,
             ):
-                return
+                return False
+
+            spot_ids = list({*current_spots.keys(), *detections_by_spot.keys()})
+            db_changed = False
 
             with self._session_factory() as session:
                 with session.begin():
@@ -339,28 +362,113 @@ class ParkingPersistenceService:
                             updated_at=payload.timestamp,
                         )
                         session.add(gateway)
+                        db_changed = True
                     gateway.inference_fps = float(payload.inference_fps)
                     gateway.last_vision_at = payload.timestamp
                     gateway.updated_at = payload.timestamp
 
-                    if detections_by_spot:
-                        slots = (
-                            session.query(ParkingSlotRecord)
-                            .filter(ParkingSlotRecord.id.in_(list(detections_by_spot)))
+                    existing_slots = (
+                        {
+                            slot.id: slot
+                            for slot in session.query(ParkingSlotRecord)
+                            .filter(ParkingSlotRecord.id.in_(spot_ids))
                             .all()
-                        )
-                        for slot in slots:
-                            slot.camera_detection = detections_by_spot[slot.id]
+                        }
+                        if spot_ids
+                        else {}
+                    )
+
+                    for spot in payload.parking_spots:
+                        next_status = "occupied" if spot.occupied else "available"
+                        existing = existing_slots.get(spot.id)
+                        detection = detections_by_spot.get(spot.id)
+
+                        if existing is None:
+                            session.add(
+                                ParkingSlotRecord(
+                                    id=spot.id,
+                                    code=spot.id,
+                                    device_id=self._gateway_id,
+                                    status=next_status,
+                                    pending=spot.pending,
+                                    occupied_since=payload.timestamp if spot.occupied else None,
+                                    camera_detection=detection,
+                                    last_seen_at=payload.timestamp,
+                                    updated_at=payload.timestamp,
+                                )
+                            )
+                            db_changed = True
+                        else:
+                            previous_status = existing.status
+                            if (
+                                previous_status != next_status
+                                or existing.pending != spot.pending
+                                or (detection is not None and existing.camera_detection != detection)
+                            ):
+                                db_changed = True
+
+                            existing.status = next_status
+                            existing.pending = spot.pending
+                            if detection is not None:
+                                existing.camera_detection = detection
+
+                            if previous_status != "occupied" and next_status == "occupied":
+                                existing.occupied_since = payload.timestamp
+                                session.add(
+                                    ParkingActivityEventRecord(
+                                        event_type="entry",
+                                        slot_id=existing.id,
+                                        slot_code=existing.code,
+                                        device_id=existing.device_id,
+                                        summary=f"Vehicle entered Bay {existing.code}",
+                                        detail="Confirmed by gateway YOLO vision",
+                                        occurred_at=payload.timestamp,
+                                    )
+                                )
+                            elif previous_status == "occupied" and next_status == "available":
+                                existing.occupied_since = None
+                                existing.camera_detection = None
+                                session.add(
+                                    ParkingActivityEventRecord(
+                                        event_type="exit",
+                                        slot_id=existing.id,
+                                        slot_code=existing.code,
+                                        device_id=existing.device_id,
+                                        summary=f"Vehicle exited Bay {existing.code}",
+                                        detail="Bay is now available",
+                                        occurred_at=payload.timestamp,
+                                    )
+                                )
+                            elif next_status == "available":
+                                existing.occupied_since = None
+                                if detection is None:
+                                    existing.camera_detection = None
+
+                            existing.last_seen_at = payload.timestamp
+                            existing.updated_at = payload.timestamp
+
+                    # Also attach detections for any spot_id not listed in parking_spots.
+                    for spot_id, detection in detections_by_spot.items():
+                        if spot_id in current_spots:
+                            continue
+                        slot = existing_slots.get(spot_id)
+                        if slot is not None:
+                            if slot.camera_detection != detection:
+                                db_changed = True
+                            slot.camera_detection = detection
                             slot.updated_at = payload.timestamp
 
             self._last_neon_vision_at = payload.timestamp
+            self._last_vision_spots = current_spots
+            self._last_vision_detection_labels = detection_labels
+            return db_changed or meaningful_change
 
-    def persist_entrance_sensor(self, payload: EntranceSensorPayload) -> None:
+    def persist_entrance_sensor(self, payload: EntranceSensorPayload) -> bool:
         """Persist entrance/exit IR counters and obstacle readings to Neon."""
         with self._lock:
             if self._session_factory is None:
                 self._warn_neon_missing()
-                return
+                return False
 
             with self._session_factory() as session:
                 with session.begin():
@@ -379,7 +487,7 @@ class ParkingPersistenceService:
                         payload.timestamp,
                         self._heartbeat_interval_seconds,
                     ):
-                        return
+                        return False
 
                     if gateway is None:
                         gateway = GatewayStatusRecord(
@@ -408,13 +516,14 @@ class ParkingPersistenceService:
                     gateway.updated_at = payload.timestamp
 
             self._last_neon_entrance_at = payload.timestamp
+            return changed
 
-    def persist_entrance_queue(self, payload: EntranceQueuePayload) -> None:
+    def persist_entrance_queue(self, payload: EntranceQueuePayload) -> bool:
         """Persist barrier ultrasonic entrance queue status and record queue transitions."""
         with self._lock:
             if self._session_factory is None:
                 self._warn_neon_missing()
-                return
+                return False
 
             next_distance = (
                 float(payload.distance) if payload.distance is not None else None
@@ -435,7 +544,7 @@ class ParkingPersistenceService:
                         payload.timestamp,
                         self._heartbeat_interval_seconds,
                     ):
-                        return
+                        return False
 
                     if gateway is None:
                         gateway = GatewayStatusRecord(
@@ -477,13 +586,14 @@ class ParkingPersistenceService:
                         )
 
             self._last_neon_queue_at = payload.timestamp
+            return changed
 
-    def persist_lighting_status(self, payload: LightingStatusPayload) -> None:
+    def persist_lighting_status(self, payload: LightingStatusPayload) -> bool:
         """Upsert lighting device state and record a lighting activity event on change."""
         with self._lock:
             if self._session_factory is None:
                 self._warn_neon_missing()
-                return
+                return False
 
             measured_at = payload.measured_at
             with self._session_factory() as session:
@@ -499,10 +609,10 @@ class ParkingPersistenceService:
                                 updated_at=measured_at,
                             )
                         )
-                        return
+                        return True
 
                     if _ensure_utc(measured_at) <= _ensure_utc(existing.measured_at):
-                        return
+                        return False
 
                     previous_leds_on = existing.leds_on
                     existing.leds_on = payload.leds_on
@@ -520,6 +630,8 @@ class ParkingPersistenceService:
                                 occurred_at=measured_at,
                             )
                         )
+                        return True
+                    return False
 
     def _warn_neon_missing(self) -> None:
         if not self._neon_warned:

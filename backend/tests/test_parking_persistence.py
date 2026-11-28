@@ -194,6 +194,79 @@ class ParkingPersistenceTests(unittest.TestCase):
             assert p2.camera_detection is not None
             self.assertEqual(p2.camera_detection["label"], "car")
 
+    def test_vision_detection_updates_bay_occupancy_immediately_without_duplicate_entry(
+        self,
+    ) -> None:
+        # Seed initial empty bays via parking/status.
+        self.persistence.persist_parking_status(
+            ParkingStatusPayload.model_validate_json(SAMPLE_PARKING_STATUS)
+        )
+
+        # Vision confirms car in P1 immediately before next parking/status cycle.
+        vision_occupied = json.loads(SAMPLE_VISION_DETECTION)
+        vision_occupied["timestamp"] = "2026-11-26T12:54:20.000+00:00"
+        vision_occupied["parking_spots"][0]["occupied"] = True
+        vision_occupied["detections"] = [
+            {"label": "car", "confidence": 0.93, "spot_id": "P1"}
+        ]
+        changed = self.persistence.persist_vision_detection(
+            VisionDetectionPayload.model_validate(vision_occupied)
+        )
+        self.assertTrue(changed)
+
+        # Repeated steady-state vision frame 100ms later is throttled (returns False).
+        vision_repeat = json.loads(json.dumps(vision_occupied))
+        vision_repeat["timestamp"] = "2026-11-26T12:54:20.100+00:00"
+        repeat_changed = self.persistence.persist_vision_detection(
+            VisionDetectionPayload.model_validate(vision_repeat)
+        )
+        self.assertFalse(repeat_changed)
+
+        # Subsequent parking/status confirming P1 occupied does not duplicate entry log.
+        later_status = json.loads(SAMPLE_PARKING_STATUS)
+        later_status["timestamp"] = "2026-11-26T12:54:25.000+00:00"
+        later_status["parking_spots"][0]["occupied"] = True
+        self.persistence.persist_parking_status(
+            ParkingStatusPayload.model_validate(later_status)
+        )
+
+        with self.session_factory() as session:
+            p1 = session.get(ParkingSlotRecord, "P1")
+            assert p1 is not None
+            self.assertEqual(p1.status, "occupied")
+            self.assertIsNotNone(p1.occupied_since)
+            self.assertIsNotNone(p1.camera_detection)
+
+            entry_events = (
+                session.query(ParkingActivityEventRecord)
+                .filter(ParkingActivityEventRecord.event_type == "entry")
+                .all()
+            )
+            self.assertEqual(len(entry_events), 1)
+
+        # Vision detects car exiting P1 -> clears status & camera_detection and logs exit.
+        vision_exit = json.loads(json.dumps(vision_occupied))
+        vision_exit["timestamp"] = "2026-11-26T12:54:30.000+00:00"
+        vision_exit["parking_spots"][0]["occupied"] = False
+        vision_exit["detections"] = []
+        exit_changed = self.persistence.persist_vision_detection(
+            VisionDetectionPayload.model_validate(vision_exit)
+        )
+        self.assertTrue(exit_changed)
+
+        with self.session_factory() as session:
+            p1 = session.get(ParkingSlotRecord, "P1")
+            assert p1 is not None
+            self.assertEqual(p1.status, "available")
+            self.assertIsNone(p1.occupied_since)
+            self.assertIsNone(p1.camera_detection)
+            exit_events = (
+                session.query(ParkingActivityEventRecord)
+                .filter(ParkingActivityEventRecord.event_type == "exit")
+                .all()
+            )
+            self.assertEqual(len(exit_events), 1)
+
     def test_persists_lighting_status_and_records_toggle_event(self) -> None:
         first = LightingStatusPayload.model_validate_json(SAMPLE_LIGHTING_STATUS)
         self.persistence.persist_lighting_status(first)
